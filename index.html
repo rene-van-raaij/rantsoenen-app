@@ -1,0 +1,1969 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F3A2A">
+<meta name="description" content="Rantsoenrekenaar voor melkvee: voersaldo, kuilanalyses en bedrijfsvergelijking. Gegevens blijven op de telefoon.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rantsoen">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Rantsoen &amp; Voersaldo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: één kolom zoals een telefoon-app — samenvatting bovenaan, details eronder, tabbalk onderin, bewerken in onderbladen */
+:root {
+  --bg: #EDF0E8;
+  --surface: #FAFBF7;
+  --surface-2: #E2E7DB;
+  --ink: #16201A;
+  --ink-2: #435247;
+  --ink-3: #66746A;
+  --line: #CBD3C4;
+  --mais: #8F5E00;
+  --mais-strong: #D89B16;
+  --mais-tint: #F6E6BA;
+  --btn: #1F3A2A;
+  --btn-ink: #F4F7F1;
+  --ok: #24653F;
+  --ok-tint: #D9ECDD;
+  --warn: #8C5300;
+  --warn-tint: #FBEACB;
+  --bad: #AE2216;
+  --bad-tint: #F9DFDB;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
+  --font-body: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --logo-plaat: #FFFFFF;
+  --r: 10px;
+  --tabbar: 64px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101511; --surface: #182019; --surface-2: #222C24; --ink: #E6EBE3; --ink-2: #B4C0B5; --ink-3: #8C9A8F; --line: #2E3A30;
+    --mais: #E8B64E; --mais-strong: #E8B64E; --mais-tint: #3A2E10;
+    --btn: #D7E5D3; --btn-ink: #102016;
+    --ok: #7BC99A; --ok-tint: #1B3325; --warn: #F0B45C; --warn-tint: #38290F; --bad: #F48F81; --bad-tint: #3B1B17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101511; --surface: #182019; --surface-2: #222C24; --ink: #E6EBE3; --ink-2: #B4C0B5; --ink-3: #8C9A8F; --line: #2E3A30;
+  --mais: #E8B64E; --mais-strong: #E8B64E; --mais-tint: #3A2E10;
+  --btn: #D7E5D3; --btn-ink: #102016;
+  --ok: #7BC99A; --ok-tint: #1B3325; --warn: #F0B45C; --warn-tint: #38290F; --bad: #F48F81; --bad-tint: #3B1B17;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+.app {
+  max-width: 680px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px calc(var(--tabbar) + 28px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+#view { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: .01em; text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: 26px; }
+h2 { font-size: 22px; }
+h3 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+.num, td.n, .tab-n { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-3); }
+.small { font-size: 13px; }
+.label { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+a { color: var(--ink); text-underline-offset: 2px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--mais-strong); outline-offset: 2px; }
+
+/* Kop */
+.kop { display: flex; flex-direction: column; gap: 6px; }
+.kop-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.kop .merk { font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.koppelregel { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--ink-2); }
+.koppelregel b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.koppelregel button { background: none; border: 0; padding: 0; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; color: var(--ink-2); }
+
+/* Bedrijf in de kop */
+.bedrijfknop { display: flex; align-items: center; gap: 12px; background: none; border: 0; padding: 4px 0; text-align: left; cursor: pointer; color: var(--ink); width: 100%; min-width: 0; }
+.bk-tekst { display: flex; flex-direction: column; min-width: 0; }
+.bnaam { font-family: var(--font-display); font-size: 27px; font-weight: 700; line-height: 1.05; overflow-wrap: anywhere; }
+.wissel { font-size: 13px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.logo { width: 52px; height: 52px; flex: none; border-radius: 10px; object-fit: contain; background: var(--logo-plaat); border: 1px solid var(--line); padding: 3px; }
+.logo.groot { width: 88px; height: 88px; border-radius: 14px; }
+.logo.mini { width: 28px; height: 28px; border-radius: 6px; padding: 1px; }
+.monogram { display: inline-grid; place-items: center; background: var(--mais-tint); border-color: var(--mais-strong); color: var(--ink); font-family: var(--font-display); font-weight: 700; font-size: 21px; letter-spacing: .02em; padding: 0; }
+.logo.groot.monogram { font-size: 34px; }
+.logo.mini.monogram { font-size: 12px; }
+.logoregel { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.logoknoppen { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; flex: 1; }
+.logoknoppen .btn { cursor: pointer; }
+.verborgen { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.bedrijf-lijst { display: flex; flex-direction: column; gap: 8px; }
+.bedrijf-optie { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); cursor: pointer; color: var(--ink); }
+.bedrijf-optie > span:nth-child(2) { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.bedrijf-optie.actief { border-color: var(--mais-strong); background: var(--mais-tint); }
+
+/* Vergelijken */
+.segment.segment-breed { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+.segment.segment-breed button { padding: 8px 2px; font-size: 14px; min-width: 0; }
+.staven { display: flex; flex-direction: column; gap: 4px; }
+.staaf-rij { display: grid; grid-template-columns: minmax(0, 9.5em) minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer; color: var(--ink); }
+.staaf-rij:hover, .staaf-rij.actief { background: var(--surface-2); }
+.staaf-naam { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+.staaf-naam > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staaf-baan { position: relative; height: 18px; }
+.staaf { position: absolute; top: 2px; bottom: 2px; background: var(--mais-strong); border-radius: 0 4px 4px 0; }
+.staaf.neg { background: var(--ink-3); border-radius: 4px 0 0 4px; }
+.staaf-rij.actief .staaf:not(.neg) { background: var(--mais); }
+.nullijn { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink-3); }
+.staaf-waarde { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+table.vergelijk th { white-space: normal; min-width: 64px; vertical-align: bottom; }
+table.vergelijk tr.actief td { background: var(--mais-tint); }
+@media (max-width: 420px) { .staaf-rij { grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) auto; } }
+
+/* Knoppen */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn.prim { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+.btn.mais { background: var(--mais-tint); border-color: var(--mais-strong); color: var(--ink); }
+.btn.gevaar { color: var(--bad); border-color: var(--bad); background: var(--surface); }
+.btn.klein { min-height: 36px; padding: 0 12px; font-size: 14px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.knoppen { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Panelen */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sectie { display: flex; flex-direction: column; gap: 10px; }
+.sectie-kop { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+
+/* Kerncijfers */
+.tegels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tegel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tegel.uitgelicht { background: var(--mais-tint); border-color: var(--mais-strong); }
+.tegel .waarde { font-family: var(--font-display); font-size: 28px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.tegel .waarde.neg { color: var(--bad); }
+.tegel .sub { font-size: 12.5px; color: var(--ink-2); }
+@media (max-width: 420px) {
+  .tegels { grid-template-columns: 1fr 1fr; }
+  .tegels .tegel:first-child { grid-column: 1 / -1; }
+}
+
+/* Meldingen */
+.melding { border-radius: 8px; padding: 10px 12px; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
+.melding.info { background: var(--surface-2); color: var(--ink); }
+.melding.let { background: var(--warn-tint); color: var(--ink); }
+.melding.kritiek { background: var(--bad-tint); color: var(--ink); }
+.melding .stip { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; flex: none; }
+.melding.let .stip { background: var(--warn); }
+.melding.kritiek .stip { background: var(--bad); }
+.melding.info .stip { background: var(--ink-3); }
+.melding .knoppen { margin-top: 8px; }
+.meldingen { display: flex; flex-direction: column; gap: 6px; }
+
+/* Rantsoentabel */
+.tabel-wrap { overflow-x: auto; margin: 0 -4px; }
+table.rt { width: 100%; border-collapse: collapse; font-size: 15px; }
+table.rt th { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.rt th:first-child, table.rt td:first-child { text-align: left; }
+table.rt td { padding: 9px 4px; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+table.rt td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.rt td.adv, table.rt th.adv { background: var(--mais-tint); }
+table.rt td.adv { font-weight: 700; }
+table.rt tfoot td { border-bottom: 0; font-weight: 600; color: var(--ink-2); }
+table.rt .naam { font-weight: 500; }
+table.rt .naam small { display: block; font-weight: 400; color: var(--ink-3); font-size: 12.5px; }
+.pijl-op { color: var(--ink-2); font-size: 12px; margin-left: 2px; }
+
+/* Schakelaar */
+.segment { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.segment button { border: 0; background: none; padding: 8px 14px; min-height: 40px; font-weight: 600; cursor: pointer; color: var(--ink-2); }
+.segment button[aria-pressed="true"] { background: var(--btn); color: var(--btn-ink); }
+
+/* Normmeters */
+.normen { display: flex; flex-direction: column; gap: 14px; }
+.norm { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; }
+.norm .nm { font-weight: 600; }
+.norm .nm small { font-weight: 400; color: var(--ink-3); margin-left: 4px; }
+.norm .wd { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; color: var(--ink-2); }
+.meter { grid-column: 1 / -1; position: relative; height: 12px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.meter .band { position: absolute; top: 0; bottom: 0; background: var(--ok-tint); border-left: 2px solid var(--ok); border-right: 2px solid var(--ok); }
+.meter .vul { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 3px; background: var(--ink-2); }
+.meter .vul.ok { background: var(--ok); }
+.meter .vul.let { background: var(--warn); }
+.meter .vul.kritiek { background: var(--bad); }
+.pil { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: .02em; }
+.pil.ok { background: var(--ok-tint); color: var(--ok); }
+.pil.let { background: var(--warn-tint); color: var(--warn); }
+.pil.kritiek { background: var(--bad-tint); color: var(--bad); }
+.dekt { font-size: 14px; color: var(--ink-2); }
+.dekt b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* Lijst met label/waarde */
+dl.kv { display: grid; grid-template-columns: 1fr auto; margin: 0; }
+dl.kv dt, dl.kv dd { padding: 8px 0; border-bottom: 1px solid var(--line); margin: 0; }
+dl.kv dd { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+dl.kv dt.tot, dl.kv dd.tot { border-bottom: 0; font-size: 17px; }
+dl.kv dd.tot { font-family: var(--font-display); font-size: 22px; }
+
+/* Grafiek */
+.grafiek { position: relative; }
+.grafiek svg { width: 100%; height: auto; display: block; overflow: visible; }
+.grafiek .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 13px; padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); font-variant-numeric: tabular-nums; }
+.grafiek text { font-family: var(--font-body); font-size: 11px; fill: var(--ink-3); }
+.grafiek text.ink { fill: var(--ink); font-weight: 600; }
+details.tabelweergave summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
+details.tabelweergave table { margin-top: 8px; }
+
+/* Voerkaarten (zoals een analyseverslag) */
+.groep { display: flex; flex-direction: column; gap: 10px; }
+.voerkaart { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; text-align: left; width: 100%; cursor: pointer; }
+.voerkaart:hover { border-color: var(--ink-3); }
+.voerkaart.uit { opacity: .62; }
+.vk-kop { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.vk-naam { font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1.1; }
+.vk-bron { font-size: 12.5px; color: var(--ink-3); }
+.vk-bron.std { color: var(--warn); font-weight: 600; }
+.analyse { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.analyse .cel { padding: 6px 4px; display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.analyse .cel + .cel { border-left: 1px solid var(--line); padding-left: 8px; }
+.analyse em { font-style: normal; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.analyse b { font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; }
+.voerkaart > span { display: flex; }
+.voerkaart > .analyse { display: grid; }
+.voerkaart[disabled] { cursor: default; opacity: 1; color: var(--ink); }
+.vk-voet { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; color: var(--ink-2); }
+.vk-voet b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.chip.goed { background: var(--ok-tint); color: var(--ok); }
+.chip.duur { background: var(--warn-tint); color: var(--warn); }
+
+/* Formulieren */
+.form { display: flex; flex-direction: column; gap: 14px; }
+.velden { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.velden.drie { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.veld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.veld.vol { grid-column: 1 / -1; }
+.veld label { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.veld .hint { font-size: 12.5px; color: var(--ink-3); }
+.veld input, .veld select, .veld textarea {
+  width: 100%; min-height: 44px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.veld textarea { min-height: 64px; resize: vertical; }
+.veld.fout input { border-color: var(--bad); }
+.veld .fouttekst { color: var(--bad); font-size: 12.5px; }
+.eenheid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.eenheid select { width: auto; }
+.vink { display: flex; gap: 10px; align-items: center; min-height: 44px; font-weight: 500; }
+.vink input { width: 22px; height: 22px; accent-color: var(--btn); }
+fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+legend { font-family: var(--font-display); font-size: 19px; font-weight: 700; margin-bottom: 4px; padding: 0; }
+@media (max-width: 380px) { .velden.drie { grid-template-columns: 1fr 1fr; } }
+
+/* Onderblad */
+.blad-achter { position: fixed; inset: 0; background: rgba(10, 16, 12, .45); z-index: 40; }
+.blad {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 92%;
+  background: var(--bg); border-radius: 16px 16px 0 0; overflow-y: auto; overscroll-behavior: contain;
+  padding-top: 8px;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
+}
+.blad-binnen { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.blad-greep { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 4px; }
+.blad-kop { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.sluit { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 20px; line-height: 1; }
+.blad-voet { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom, 0px)); background: var(--bg); padding: 12px 0 calc(6px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); display: flex; gap: 10px; flex-wrap: wrap; }
+.blad-voet .btn.prim { flex: 1; }
+.sjablonen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sjabloon { text-align: left; padding: 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 64px; }
+.sjabloon b { font-weight: 600; }
+.sjabloon span { font-size: 12.5px; color: var(--ink-3); }
+.livetotaal { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 13px; }
+.livetotaal b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+
+/* Tabbalk */
+.tabbalk {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+}
+.tabbalk-binnen { max-width: 680px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tab { height: var(--tabbar); border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; color: var(--ink-3); font-size: 12px; font-weight: 600; min-width: 0; padding: 0 2px; }
+.tab svg { width: 24px; height: 24px; }
+.tab[aria-current="page"] { color: var(--ink); }
+.tab[aria-current="page"] svg .acc { fill: var(--mais-strong); }
+
+/* Prijzen */
+.prijskop { display: flex; gap: 18px; flex-wrap: wrap; }
+.prijskop div { display: flex; flex-direction: column; }
+.prijskop .groot { font-family: var(--font-display); font-weight: 700; font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
+.sparks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.spark text { font-size: 10px; fill: var(--ink-3); font-family: var(--font-body); }
+.bron { font-size: 13px; color: var(--ink-3); }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar) + 14px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; max-width: calc(100% - 32px); }
+.leeg { text-align: left; display: flex; flex-direction: column; gap: 12px; padding: 24px 0; }
+.laden { display: flex; flex-direction: column; gap: 10px; padding: 24px 0; color: var(--ink-3); }
+.balk { height: 14px; border-radius: 6px; background: var(--surface-2); }
+details.uitleg summary { cursor: pointer; font-weight: 600; }
+details.uitleg[open] summary { margin-bottom: 8px; }
+.uitleg p + p, .uitleg ul { margin-top: 8px; }
+.uitleg ul { padding-left: 18px; margin-bottom: 0; }
+.uitleg code { font-size: 13px; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+  .blad { animation: omhoog .18s ease-out; }
+  @keyframes omhoog { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="kop" id="kop">
+    <div class="kop-top">
+      <span class="merk">Rantsoen &amp; Voersaldo</span>
+      <span class="small muted" id="opslag-status"></span>
+    </div>
+    <div id="bedrijfkop"></div>
+    <div class="koppelregel" id="koppelregel"></div>
+  </header>
+  <main id="view" aria-live="polite">
+    <div class="laden"><div class="balk" style="width:60%"></div><div class="balk" style="width:85%"></div><div class="balk" style="width:40%"></div><p>Rantsoen en prijzen worden opgehaald…</p></div>
+  </main>
+</div>
+
+<nav class="tabbalk" aria-label="Onderdelen">
+  <div class="tabbalk-binnen">
+    <button class="tab" data-tab="rantsoen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18l-2.2 8.2A2 2 0 0 1 16.9 19H7.1a2 2 0 0 1-1.9-1.8L3 9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path class="acc" d="M6 9c1.5-2.5 4-3.5 6-3.5S16.5 6.5 18 9z" fill="currentColor"/></svg>Rantsoen</button>
+    <button class="tab" data-tab="voeders"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 19.5C4 12 8 8 12 8s8 4 9.5 11.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path class="acc" d="M8.5 19.5c.8-3.4 2-5.5 3.5-5.5s2.7 2.1 3.5 5.5z" fill="currentColor"/></svg>Voeders</button>
+    <button class="tab" data-tab="bedrijf"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20V10.5L12 4l9 6.5V20z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path class="acc" d="M9.5 20v-6h5v6z" fill="currentColor"/></svg>Bedrijf</button>
+    <button class="tab" data-tab="vergelijk"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="11" width="3.5" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect class="acc" x="10.25" y="5" width="3.5" height="13" rx="1" fill="currentColor"/><rect x="15" y="8.5" width="3.5" height="9.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Vergelijk</button>
+    <button class="tab" data-tab="prijzen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="acc" d="M5 10h8v1.6H5zM5 12.6h8v1.6H5z" fill="currentColor"/></svg>Prijzen</button>
+  </div>
+</nav>
+<div id="blad-houder"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+// ===================== Rekenkern =====================
+// Normen: CVB Tabellenboek Voeding Herkauwers (VEM2022), Handboek Melkveehouderij.
+const ONDERHOUD_FACTOR = { stal: 53.0, beperkt: 61.0, weide: 68.9 };
+
+function num(v, d) {
+  const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : v;
+  return Number.isFinite(n) ? n : d;
+}
+
+function fpcmFactor(vet, eiwit) { return 0.337 + 0.116 * vet + 0.06 * eiwit; }
+
+function dsAutoVoor(melk) { return 13.5 + 0.25 * melk; }
+
+function dsOpname(ins, melk) {
+  if (ins.dsAuto === false) {
+    const zelf = num(ins.dsOpname, dsAutoVoor(num(ins.melk, 28)));
+    return zelf + (dsAutoVoor(melk) - dsAutoVoor(num(ins.melk, 28)));
+  }
+  return dsAutoVoor(melk);
+}
+
+function behoefte(ins, melk, dichtheid) {
+  const lg = num(ins.lg, 675);
+  const vet = num(ins.vet, 4.4), eiwit = num(ins.eiwit, 3.55);
+  const fpcm = melk * fpcmFactor(vet, eiwit);
+  const f = ONDERHOUD_FACTOR[ins.beweiding] || 53.0;
+  const d = dichtheid || 970;
+  const onderhoud = f * Math.pow(lg, 0.75) * (1 + (d - 970) * 0.000327);
+  const jeugd = ins.jeugd !== false;
+  const vem = onderhoud + 390 * fpcm + (jeugd ? 330 : 0) + num(ins.extraVem, 0);
+  const E = eiwit * melk * 10;
+  const dve = 54 + 0.1 * lg + 1.396 * E + 0.000195 * E * E + (jeugd ? 37 : 0) + num(ins.extraDve, 0);
+  const ds = dsOpname(ins, melk);
+  return {
+    melk, fpcm, onderhoud, vem, dve, E,
+    dsDoel: ds, dsMin: ds - 1.5, dsMax: ds + 0.5,
+    oebMin: num(ins.oebMin, 0), oebMax: num(ins.oebMax, 300),
+    swMin: num(ins.swMin, 1.0),
+    vemMax: vem * (1 + num(ins.vemMarge, 5) / 100),
+  };
+}
+
+// Hoeveel kg melk kan een gegeven aanbod VEM / DVE dekken?
+function melkUitVem(ins, vemAanbod, dichtheid) {
+  const b0 = behoefte(ins, 0, dichtheid);
+  const per = 390 * fpcmFactor(num(ins.vet, 4.4), num(ins.eiwit, 3.55));
+  return Math.max(0, (vemAanbod - b0.vem) / per);
+}
+function melkUitDve(ins, dveAanbod) {
+  const b0 = behoefte(ins, 0, 970);
+  const c = b0.dve - dveAanbod; // 0.000195 E^2 + 1.396 E + c = 0
+  const disc = 1.396 * 1.396 - 4 * 0.000195 * c;
+  if (disc < 0) return 0;
+  const E = (-1.396 + Math.sqrt(disc)) / (2 * 0.000195);
+  return Math.max(0, E / (num(ins.eiwit, 3.55) * 10));
+}
+
+// ---------- Prijzen ----------
+function prijsPerKgDs(v) {
+  const p = num(v.prijs, 0), ds = num(v.ds, 100) / 100;
+  if (!(ds > 0)) return 0;
+  switch (v.eenheid) {
+    case 'ton_ds': return p / 1000;
+    case '100kg': return p / 100 / ds;
+    case 'kg': return p / ds;
+    default: return p / 1000 / ds; // ton product
+  }
+}
+function prijsPerTonProduct(v) { return prijsPerKgDs(v) * num(v.ds, 100) / 100 * 1000; }
+
+function mineraalKosten(v) { return num(v.huidig, 0) / 1000 * num(v.prijs, 0); }
+
+// Voederwaardeprijs (WUR) in € per ton product
+function voederwaardePrijs(v, wur) {
+  if (!wur) return null;
+  const dsKg = num(v.ds, 0) * 10;
+  return num(v.vem, 0) * dsKg / 1000 * (wur.kvem / 100) + num(v.dve, 0) * dsKg / 1000 * (wur.dveToeslag / 100);
+}
+
+function melkprijsPerKg(ins, melk) {
+  if (!melk) return 0;
+  return (num(ins.eiwit, 3.55) / 100) * (melk.eiwitwaarde / 100)
+       + (num(ins.vet, 4.4) / 100) * (melk.vetwaarde / 100)
+       + num(ins.toeslag, 0) / 100;
+}
+
+// ---------- Simplex (twee-fasen, regel van Bland) ----------
+function simplex(c, rows) {
+  const n = c.length, m = rows.length;
+  const R = rows.map(r => r.b < 0
+    ? { a: r.a.map(v => -v), op: r.op === '<=' ? '>=' : r.op === '>=' ? '<=' : '=', b: -r.b }
+    : { a: r.a.slice(), op: r.op, b: r.b });
+  let nSlack = 0, nArt = 0;
+  R.forEach(r => { if (r.op !== '=') nSlack++; if (r.op !== '<=') nArt++; });
+  const N = n + nSlack + nArt;
+  const T = [], basis = [], isArt = new Array(N).fill(false);
+  let si = n, ai = n + nSlack;
+  R.forEach(r => {
+    const row = new Array(N + 1).fill(0);
+    r.a.forEach((v, j) => { row[j] = v; });
+    if (r.op === '<=') { row[si] = 1; basis.push(si); si++; }
+    else if (r.op === '>=') { row[si] = -1; si++; row[ai] = 1; isArt[ai] = true; basis.push(ai); ai++; }
+    else { row[ai] = 1; isArt[ai] = true; basis.push(ai); ai++; }
+    row[N] = r.b;
+    T.push(row);
+  });
+  const EPS = 1e-9;
+  function pivot(pr, pc) {
+    const rowP = T[pr], pv = rowP[pc];
+    for (let j = 0; j <= N; j++) rowP[j] /= pv;
+    for (let i = 0; i < m; i++) {
+      if (i === pr) continue;
+      const f = T[i][pc];
+      if (Math.abs(f) > EPS) { const ri = T[i]; for (let j = 0; j <= N; j++) ri[j] -= f * rowP[j]; }
+    }
+    basis[pr] = pc;
+  }
+  function run(cost, allowed) {
+    for (let iter = 0; iter < 10000; iter++) {
+      const inBasis = new Set(basis);
+      let pc = -1;
+      for (let j = 0; j < N; j++) {
+        if (!allowed(j) || inBasis.has(j)) continue;
+        let rc = cost[j];
+        for (let i = 0; i < m; i++) rc -= cost[basis[i]] * T[i][j];
+        if (rc < -1e-9) { pc = j; break; }
+      }
+      if (pc < 0) return 'optimal';
+      let pr = -1, best = Infinity;
+      for (let i = 0; i < m; i++) {
+        if (T[i][pc] > EPS) {
+          const ratio = T[i][N] / T[i][pc];
+          if (ratio < best - 1e-12 || (pr >= 0 && Math.abs(ratio - best) <= 1e-12 && basis[i] < basis[pr])) { best = ratio; pr = i; }
+        }
+      }
+      if (pr < 0) return 'unbounded';
+      pivot(pr, pc);
+    }
+    return 'iterlimit';
+  }
+  if (nArt) {
+    const c1 = new Array(N).fill(0);
+    isArt.forEach((a, j) => { if (a) c1[j] = 1; });
+    run(c1, () => true);
+    let inf = 0;
+    basis.forEach((b, i) => { if (isArt[b]) inf += T[i][N]; });
+    if (inf > 1e-7) return { status: 'infeasible' };
+    for (let i = 0; i < m; i++) {
+      if (!isArt[basis[i]]) continue;
+      for (let j = 0; j < N; j++) if (!isArt[j] && Math.abs(T[i][j]) > 1e-9) { pivot(i, j); break; }
+    }
+  }
+  const c2 = new Array(N).fill(0);
+  c.forEach((v, j) => { c2[j] = v; });
+  const st = run(c2, j => !isArt[j]);
+  if (st !== 'optimal') return { status: st };
+  const x = new Array(n).fill(0);
+  basis.forEach((b, i) => { if (b < n) x[b] = T[i][N]; });
+  return { status: 'optimal', x };
+}
+
+// ---------- Rantsoen ----------
+const NORM_REGELS = [
+  // key, label, op, straf (€ per eenheid tekort/overschot)
+  { key: 'dsMax', op: '<=', straf: 500 },
+  { key: 'vem', op: '>=', straf: 100 },
+  { key: 'dve', op: '>=', straf: 100 },
+  { key: 'sw', op: '>=', straf: 80 },
+  { key: 'oebMin', op: '>=', straf: 60 },
+  { key: 'dsMin', op: '>=', straf: 40 },
+  { key: 'oebMax', op: '<=', straf: 30 },
+  { key: 'vemMax', op: '<=', straf: 20 },
+];
+
+function voerVariabelen(voeders) {
+  return voeders.filter(v => v.soort !== 'mineraal' && v.actief !== false && num(v.ds, 0) > 0);
+}
+
+function grens(v, key) {
+  const raw = v[key];
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = num(raw, null);
+  return n === null ? null : Math.max(0, n);
+}
+
+function losRantsoen(vars, B) {
+  const n = vars.length;
+  const ds = vars.map(v => num(v.ds, 0) / 100);
+  const lo = vars.map((v, i) => (grens(v, 'min') || 0) * ds[i]);
+  const hi = vars.map((v, i) => { const g = grens(v, 'max'); return g === null ? Infinity : Math.max(g * ds[i], lo[i]); });
+  const coef = {
+    vem: vars.map(v => num(v.vem, 0) / 1000), vemMax: vars.map(v => num(v.vem, 0) / 1000),
+    dve: vars.map(v => num(v.dve, 0) / 100),
+    oebMin: vars.map(v => num(v.oeb, 0) / 100), oebMax: vars.map(v => num(v.oeb, 0) / 100),
+    dsMax: vars.map(() => 1), dsMin: vars.map(() => 1),
+    sw: vars.map(v => num(v.sw, 0) - B.swMin),
+  };
+  const rhs = {
+    vem: B.vem / 1000, vemMax: B.vemMax / 1000, dve: B.dve / 100,
+    oebMin: B.oebMin / 100, oebMax: B.oebMax / 100,
+    dsMax: B.dsMax, dsMin: B.dsMin, sw: 0,
+  };
+  const K = NORM_REGELS.length;
+  const c = vars.map(v => prijsPerKgDs(v)).concat(NORM_REGELS.map(r => r.straf));
+  const rows = [];
+  NORM_REGELS.forEach((r, k) => {
+    const a = new Array(n + K).fill(0);
+    let b = rhs[r.key];
+    coef[r.key].forEach((f, i) => { a[i] = f; b -= f * lo[i]; });
+    a[n + k] = r.op === '>=' ? 1 : -1;
+    rows.push({ a, op: r.op, b });
+  });
+  vars.forEach((v, i) => {
+    if (Number.isFinite(hi[i])) {
+      const a = new Array(n + K).fill(0); a[i] = 1;
+      rows.push({ a, op: '<=', b: hi[i] - lo[i] });
+    }
+  });
+  const res = simplex(c, rows);
+  if (res.status !== 'optimal') return null;
+  const kgDs = vars.map((v, i) => lo[i] + res.x[i]);
+  return kgDs;
+}
+
+function totalen(voeders, kgDsMap) {
+  let ds = 0, vem = 0, dve = 0, oeb = 0, swSom = 0, kosten = 0;
+  voeders.forEach(v => {
+    if (v.soort === 'mineraal') { kosten += mineraalKosten(v); return; }
+    const x = kgDsMap[v.id] || 0;
+    if (!x) return;
+    ds += x; vem += x * num(v.vem, 0); dve += x * num(v.dve, 0); oeb += x * num(v.oeb, 0);
+    swSom += x * num(v.sw, 0); kosten += x * prijsPerKgDs(v);
+  });
+  return { ds, vem, dve, oeb, sw: ds > 0 ? swSom / ds : 0, kosten, dichtheid: ds > 0 ? vem / ds : 970 };
+}
+
+function toets(T, B) {
+  const p = [];
+  const r0 = x => Math.round(x);
+  if (T.vem < B.vem * 0.99) p.push({ key: 'vem', ernst: 'kritiek', tekst: `Te weinig energie: ${fmt0(B.vem - T.vem)} VEM tekort` });
+  if (T.vem > B.vemMax * 1.005) p.push({ key: 'vemMax', ernst: 'let', tekst: `Ruim ${fmt0(T.vem - B.vem)} VEM boven de behoefte` });
+  if (T.dve < B.dve * 0.99) p.push({ key: 'dve', ernst: 'kritiek', tekst: `Te weinig eiwit: ${fmt0(B.dve - T.dve)} g DVE tekort` });
+  if (T.oeb < B.oebMin - 5) p.push({ key: 'oebMin', ernst: 'kritiek', tekst: `OEB te laag (${r0(T.oeb)} g): te weinig penseiwit` });
+  if (T.oeb > B.oebMax + 5) p.push({ key: 'oebMax', ernst: 'let', tekst: `OEB hoog (${r0(T.oeb)} g): eiwit wordt slecht benut` });
+  if (T.ds > B.dsMax + 0.05) p.push({ key: 'dsMax', ernst: 'kritiek', tekst: `Meer droge stof (${fmt1(T.ds)} kg) dan de koe kan opnemen (${fmt1(B.dsMax)} kg)` });
+  if (T.ds < B.dsMin - 0.05) p.push({ key: 'dsMin', ernst: 'let', tekst: `Weinig droge stof (${fmt1(T.ds)} kg): pens raakt niet gevuld` });
+  if (T.ds > 0 && T.sw < B.swMin - 0.02) p.push({ key: 'sw', ernst: 'kritiek', tekst: `Te weinig structuur (${fmt2(T.sw)} per kg DS, minimaal ${fmt2(B.swMin)})` });
+  return p;
+}
+
+function fmt0(x) { return Math.round(x).toLocaleString('nl-NL'); }
+function fmt1(x) { return (Math.round(x * 10) / 10).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+function fmt2(x) { return x.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// Bereken het goedkoopste rantsoen dat de normen dekt voor een melkgift.
+function optimaal(voeders, ins, melk) {
+  const vars = voerVariabelen(voeders);
+  let dicht = 970, kgDs = null, B = null;
+  for (let it = 0; it < 4; it++) {
+    B = behoefte(ins, melk, dicht);
+    kgDs = vars.length ? losRantsoen(vars, B) : [];
+    if (!kgDs) return null;
+    const ds = kgDs.reduce((s, x) => s + x, 0);
+    const vem = kgDs.reduce((s, x, i) => s + x * num(vars[i].vem, 0), 0);
+    const nd = ds > 0 ? vem / ds : 970;
+    if (Math.abs(nd - dicht) < 0.5) { dicht = nd; break; }
+    dicht = nd;
+  }
+  const map = {};
+  vars.forEach((v, i) => { map[v.id] = kgDs[i] > 1e-6 ? kgDs[i] : 0; });
+  const T = totalen(voeders, map);
+  B = behoefte(ins, melk, T.dichtheid);
+  return { kgDs: map, T, B, problemen: toets(T, B) };
+}
+
+// Beoordeel het huidige rantsoen (kg product per koe per dag).
+function huidigRantsoen(voeders, ins) {
+  const map = {};
+  voeders.forEach(v => { if (v.soort !== 'mineraal') map[v.id] = num(v.huidig, 0) * num(v.ds, 0) / 100; });
+  const T = totalen(voeders, map);
+  const B = behoefte(ins, num(ins.melk, 28), T.dichtheid);
+  return { kgDs: map, T, B, problemen: toets(T, B) };
+}
+
+function economie(R, ins, melkPrijzen) {
+  const melk = R.B.melk;
+  const prijs = melkprijsPerKg(ins, melkPrijzen);
+  const melkgeld = melk * prijs;
+  const kosten = R.T.kosten;
+  return { melk, prijs, melkgeld, kosten, saldo: melkgeld - kosten, per100: melk > 0 ? kosten / melk * 100 : 0 };
+}
+
+// Voersaldo bij verschillende melkgiften
+function saldoCurve(voeders, ins, melkPrijzen) {
+  const m0 = Math.round(num(ins.melk, 28));
+  const pts = [];
+  for (let m = Math.max(10, m0 - 8); m <= m0 + 8; m++) {
+    const R = optimaal(voeders, ins, m);
+    if (!R) continue;
+    const e = economie(R, ins, melkPrijzen);
+    pts.push({ melk: m, saldo: e.saldo, kosten: e.kosten, haalbaar: !R.problemen.some(p => p.ernst === 'kritiek') });
+  }
+  return pts;
+}
+
+if (typeof module !== 'undefined') module.exports = { behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen };
+
+</script>
+<script>
+'use strict';
+const STANDALONE = true; // wordt bij het bouwen van de losse app op true gezet
+// ===================== Gegevens =====================
+const BRON_WUR = 'https://www.wur.nl/nl/onderzoek/producten-diensten/voederwaardeprijzen-rundvee';
+const BRON_FC = 'https://www.frieslandcampina.com/nl/eigendom-van-boeren/garantieprijs/';
+
+// Laatst bekende prijzen; alleen gebruikt als de gedeelde opslag geen prijzen heeft.
+const RESERVE_PRIJZEN = {
+  wur: {
+    datum: '2026-10-13', kvem: 25.3, dveToeslag: 104.2, volgende: '2026-11-10',
+    mengvoer: { '90': 34.20, '105': 35.73, '120': 36.99, '150': 40.14, '180': 43.65 },
+    historie: [
+      { datum: '2025-12-09', kvem: 21.2, dve: 72.4 }, { datum: '2026-01-13', kvem: 20.9, dve: 74.4 },
+      { datum: '2026-02-10', kvem: 21.0, dve: 76.1 }, { datum: '2026-03-10', kvem: 20.8, dve: 82.9 },
+      { datum: '2026-04-14', kvem: 20.9, dve: 89.8 }, { datum: '2026-05-12', kvem: 20.6, dve: 92.2 },
+      { datum: '2026-06-09', kvem: 20.8, dve: 89.9 }, { datum: '2026-07-14', kvem: 20.9, dve: 87.7 },
+      { datum: '2026-08-11', kvem: 24.2, dve: 83.2 }, { datum: '2026-09-08', kvem: 24.1, dve: 94.2 },
+      { datum: '2026-10-13', kvem: 25.3, dve: 104.2 },
+    ],
+    bron: BRON_WUR,
+  },
+  melk: {
+    maand: '2026-11', garantieprijs: 47.00, eiwitwaarde: 656.24, vetwaarde: 524.99,
+    stdEiwit: 3.57, stdVet: 4.49, integraal: 50.71,
+    historie: [{ maand: '2026-09', garantieprijs: 44.00 }, { maand: '2026-10', garantieprijs: 45.50 }, { maand: '2026-11', garantieprijs: 47.00 }],
+    bron: BRON_FC,
+  },
+  bijgewerkt: '2026-10-30T19:00:00+01:00',
+};
+
+const STANDAARD_INS = {
+  koeien: 100, melk: 28, vet: 4.4, eiwit: 3.6, lg: 675, beweiding: 'stal', toeslag: 0,
+  dsAuto: true, dsOpname: 20.5, swMin: 1.0, oebMin: 0, oebMax: 400, vemMarge: 5,
+  jeugd: true, extraVem: 0, extraDve: 0,
+};
+
+const SOORTEN = { ruwvoer: 'Ruwvoer', bijproduct: 'Bijproduct', krachtvoer: 'Krachtvoer', mineraal: 'Mineralen' };
+const EENHEDEN = { ton: '€ per ton product', ton_ds: '€ per ton droge stof', '100kg': '€ per 100 kg', kg: '€ per kg' };
+
+// Startwaarden voor een nieuw voer. Vervang ze door de kuilanalyse of het productblad.
+const SJABLONEN = [
+  { key: 'graskuil', naam: 'Graskuil', soort: 'ruwvoer', ds: 45, vem: 940, dve: 63, oeb: 45, sw: 2.9, prijs: 170, eenheid: 'ton_ds', uitleg: 'gemiddelde kuil' },
+  { key: 'maiskuil', naam: 'Maïskuil', soort: 'ruwvoer', ds: 38, vem: 1000, dve: 52, oeb: -30, sw: 1.65, prijs: 150, eenheid: 'ton_ds', uitleg: 'gemiddelde kuil' },
+  { key: 'stro', naam: 'Stro (gehakseld)', soort: 'ruwvoer', ds: 88, vem: 425, dve: -5, oeb: -18, sw: 4.3, prijs: 150, eenheid: 'ton', max: 1.5, uitleg: 'tarwestro' },
+  { key: 'tgc', naam: 'Tarwegistconcentraat', soort: 'bijproduct', ds: 33, vem: 1050, dve: 170, oeb: 70, sw: 0, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, eiwitrijk' },
+  { key: 'bierbostel', naam: 'Bierbostel', soort: 'bijproduct', ds: 22, vem: 910, dve: 129, oeb: 70, sw: 0.6, prijs: '', eenheid: 'ton', max: 12, uitleg: 'vochtrijk, eiwitrijk' },
+  { key: 'persvezels', naam: 'Aardappelpersvezels', soort: 'bijproduct', ds: 16, vem: 1022, dve: 94, oeb: -69, sw: 0.4, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, energierijk' },
+  { key: 'perspulp', naam: 'Bietenperspulp', soort: 'bijproduct', ds: 25, vem: 1060, dve: 93, oeb: -64, sw: 0.7, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, energierijk' },
+  { key: 'brok120', naam: 'Standaardbrok 120 DVE', soort: 'krachtvoer', ds: 88, vem: 1091, dve: 136, oeb: 10, sw: 0.2, wurDve: '120', eenheid: '100kg', max: 12, uitleg: 'prijs volgens WUR' },
+  { key: 'brok180', naam: 'Eiwitrijke brok 180 DVE', soort: 'krachtvoer', ds: 88, vem: 1091, dve: 205, oeb: 60, sw: 0.2, wurDve: '180', eenheid: '100kg', max: 6, uitleg: 'prijs volgens WUR' },
+  { key: 'mineraal', naam: 'Mineralenmengsel', soort: 'mineraal', huidig: 100, prijs: '', eenheid: 'kg', uitleg: 'vaste gift' },
+  { key: 'leeg', naam: '', soort: 'bijproduct', ds: '', vem: '', dve: '', oeb: '', sw: '', prijs: '', eenheid: 'ton', uitleg: 'alles zelf invullen' },
+];
+const STARTSET = ['graskuil', 'maiskuil', 'stro', 'tgc', 'mineraal', 'mineraal'];
+
+// ===================== Toestand =====================
+const S = {
+  modus: 'laden', bedrijven: [], alleVoeders: [], bedrijfId: null,
+  ins: null, voeders: [], prijzen: null,
+  geladen: { bedrijven: false, voeders: false, prijzen: false },
+  kanSchrijven: true, tab: 'rantsoen', weergave: 'advies', bevestig: null, kengetal: 'saldo',
+};
+let db = null, assetsNs = null;
+try {
+  const t = localStorage.getItem('rv-tab'); if (t) S.tab = t === 'koppel' ? 'bedrijf' : t;
+  const b = localStorage.getItem('rv-bedrijf'); if (b) S.bedrijfId = b;
+} catch (e) { /* geen opslag */ }
+
+function bedrijvenGesorteerd() { return S.bedrijven.slice().sort((a, b) => (num(a.volgorde, 99) - num(b.volgorde, 99)) || String(a.naam).localeCompare(b.naam)); }
+function huidigBedrijf() { return S.bedrijven.find(b => b.id === S.bedrijfId) || bedrijvenGesorteerd()[0] || null; }
+function afleiden() {
+  const b = huidigBedrijf();
+  if (b && b.id !== S.bedrijfId) S.bedrijfId = b.id;
+  S.ins = b ? Object.assign({}, b.ins || {}) : null;
+  S.voeders = b ? S.alleVoeders.filter(v => v.bedrijf === b.id) : [];
+}
+function monogram(naam) {
+  const w = String(naam || '?').trim().split(/\s+/).filter(Boolean);
+  return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
+}
+function logoHtml(b, cls = 'logo') {
+  if (b && b.logo) return `<img class="${cls}" src="/_blob/${esc(b.logo)}" alt="" data-mono="${esc(monogram(b.naam))}">`;
+  if (b && b.logoData) return `<img class="${cls}" src="${esc(b.logoData)}" alt="" data-mono="${esc(monogram(b.naam))}">`;
+  return `<span class="${cls} monogram" aria-hidden="true">${esc(monogram(b && b.naam))}</span>`;
+}
+
+const $ = s => document.querySelector(s);
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+const NF = {};
+function n(x, d = 0) { if (!Number.isFinite(x)) return '–'; return (NF[d] || (NF[d] = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }))).format(x); }
+function eur(x, d = 2) { if (!Number.isFinite(x)) return '–'; return (x < 0 ? '−€ ' : '€ ') + n(Math.abs(x), d); }
+function eurPlus(x, d = 0) { if (!Number.isFinite(x)) return '–'; return (x < 0 ? '−€ ' : '+€ ') + n(Math.abs(x), d); }
+function invoer(x) { return (x === null || x === undefined || x === '') ? '' : String(x).replace('.', ','); }
+function datumNL(iso, kort) {
+  if (!iso) return '';
+  const d = new Date(iso.length === 10 ? iso + 'T12:00:00' : iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString('nl-NL', kort ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function maandNL(ym) { const d = new Date(ym + '-15T12:00:00'); return isNaN(d) ? ym : d.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }); }
+function prijzen() {
+  const p = S.prijzen || {};
+  return { wur: p.wur || RESERVE_PRIJZEN.wur, melk: p.melk || RESERVE_PRIJZEN.melk, bijgewerkt: p.bijgewerkt || (S.prijzen ? null : RESERVE_PRIJZEN.bijgewerkt), reserve: !S.prijzen };
+}
+function ins() { return Object.assign({}, STANDAARD_INS, S.ins || {}); }
+function gesorteerd() { return S.voeders.slice().sort((a, b) => (num(a.volgorde, 99) - num(b.volgorde, 99)) || String(a.naam).localeCompare(b.naam)); }
+function kgProduct(v, kgDs) { const ds = num(v.ds, 0) / 100; return ds > 0 ? kgDs / ds : 0; }
+
+// ===================== Opslag =====================
+const schrijfRij = {};
+function toast(t) {
+  const el = $('#toast'); el.textContent = t; el.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => { el.hidden = true; }, 2600);
+}
+function foutTekst(e) {
+  const c = e && e.code;
+  if (c === 'invalid_argument') return 'Opslaan lukt niet: je hebt alleen leesrechten op deze app.';
+  if (c === 'quota_exceeded') return 'Opslaan lukt niet: de opslag is vol. Verwijder oude voeders.';
+  if (c === 'resource_exhausted') return 'Even te veel wijzigingen tegelijk. Probeer het zo opnieuw.';
+  return 'Opslaan lukt nu niet. Controleer de verbinding en probeer het opnieuw.';
+}
+function lokaalOpslaan() {
+  try { localStorage.setItem('rv-lokaal2', JSON.stringify({ bedrijven: S.bedrijven, voeders: S.alleVoeders })); } catch (e) { /* vol of geblokkeerd */ }
+}
+function schrijf(pad, data) {
+  if (S.modus !== 'db') { lokaalOpslaan(); return Promise.resolve(); }
+  const vorige = schrijfRij[pad] || Promise.resolve();
+  const p = vorige.catch(() => {}).then(() => db.doc(pad).set(data)).catch(e => {
+    toast(foutTekst(e));
+    if (e && e.code === 'invalid_argument') { S.kanSchrijven = false; render(); }
+    throw e;
+  });
+  schrijfRij[pad] = p;
+  return p;
+}
+function verwijder(pad) {
+  if (S.modus !== 'db') { lokaalOpslaan(); return Promise.resolve(); }
+  const vorige = schrijfRij[pad] || Promise.resolve();
+  const p = vorige.catch(() => {}).then(() => db.doc(pad).delete()).catch(e => { toast(foutTekst(e)); throw e; });
+  schrijfRij[pad] = p;
+  return p;
+}
+function voerData(v) { const d = Object.assign({}, v); delete d.id; return d; }
+function bewaarVoer(v) {
+  if (!v.bedrijf) v.bedrijf = S.bedrijfId;
+  const i = S.alleVoeders.findIndex(x => x.id === v.id);
+  if (i >= 0) S.alleVoeders[i] = v; else S.alleVoeders.push(v);
+  afleiden();
+  return schrijf('voeders/' + v.id, voerData(v));
+}
+function bedrijfData(b) { const d = Object.assign({}, b); delete d.id; return d; }
+function bewaarBedrijf(b) {
+  if (insWacht && insWacht.id === b.id) { clearTimeout(insTimer); insWacht = null; }
+  const i = S.bedrijven.findIndex(x => x.id === b.id);
+  if (i >= 0) S.bedrijven[i] = b; else S.bedrijven.push(b);
+  afleiden();
+  return schrijf('bedrijven/' + b.id, bedrijfData(b));
+}
+let insTimer = null, insWacht = null;
+function bewaarIns(direct) {
+  clearTimeout(insTimer);
+  const b = huidigBedrijf(); if (!b) return;
+  b.ins = Object.assign({}, S.ins);
+  insWacht = b;
+  const doe = () => { const w = insWacht; insWacht = null; if (w) return schrijf('bedrijven/' + w.id, bedrijfData(w)).catch(() => {}); };
+  if (direct) return doe();
+  insTimer = setTimeout(doe, 700);
+}
+
+async function start() {
+  render();
+  if (STANDALONE) { prijzenLokaalLaden(); startLokaal(); prijzenOphalen(false); registreerSW(); return; }
+  let cdb = null;
+  try { cdb = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('db') : null; } catch (e) { cdb = null; }
+  if (!cdb) { startLokaal(); return; }
+  db = cdb; S.modus = 'db';
+  $('#opslag-status').textContent = '';
+  db.collection('bedrijven').onSnapshot(q => {
+    S.bedrijven = q.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    if (insWacht) { const i = S.bedrijven.findIndex(b => b.id === insWacht.id); if (i >= 0) S.bedrijven[i] = insWacht; }
+    S.geladen.bedrijven = true; afleiden(); render();
+  }, opslagFout);
+  db.collection('voeders').onSnapshot(q => {
+    S.alleVoeders = q.docs.map(d => Object.assign({ id: d.id }, d.data())); S.geladen.voeders = true; afleiden(); render();
+  }, opslagFout);
+  db.doc('prijzen/actueel').onSnapshot(s => {
+    S.prijzen = s.exists ? s.data() : null; S.geladen.prijzen = true; render();
+  }, opslagFout);
+  try {
+    const u = await window.claude.use('user');
+    if (u) { const mag = await u.can('data.write'); if (mag === false) { S.kanSchrijven = false; render(); } }
+  } catch (e) { /* onbekend: laat schrijven toe, een geweigerde schrijfactie beslist */ }
+  try { assetsNs = await window.claude.use('assets'); } catch (e) { assetsNs = null; }
+  if (S.tab === 'bedrijf') render();
+}
+function opslagFout(e) {
+  if (S.modus === 'db' && !(S.geladen.bedrijven && S.geladen.voeders)) { startLokaal(); return; }
+  if (e && e.code === 'revoked') { S.kanSchrijven = false; render(); }
+}
+function startLokaal() {
+  S.modus = 'lokaal';
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem('rv-lokaal2') || 'null'); } catch (e) { data = null; }
+  if (data && data.bedrijven) { S.bedrijven = data.bedrijven; S.alleVoeders = data.voeders || []; }
+  else {
+    const b = nieuwBedrijfObject('Bedrijf 1', 1);
+    b.ins.voorbeeld = true;
+    S.bedrijven = [b]; S.alleVoeders = startsetMaken(b.id);
+  }
+  S.geladen = { bedrijven: true, voeders: true, prijzen: true };
+  afleiden();
+  $('#opslag-status').textContent = STANDALONE ? 'Opgeslagen op deze telefoon' : 'Opgeslagen op dit toestel';
+  render();
+}
+
+// ---------- Losse app: prijzen, back-up, offline ----------
+function prijzenLokaalLaden() {
+  try { const p = JSON.parse(localStorage.getItem('rv-prijzen') || 'null'); if (p && p.wur && p.melk) S.prijzen = p; } catch (e) { /* geen opslag */ }
+}
+function prijzenBewaren() { try { localStorage.setItem('rv-prijzen', JSON.stringify(S.prijzen)); } catch (e) { /* vol */ } }
+function prijzenSamenvoegen(nieuw) {
+  const oud = prijzen();
+  const uit = { wur: oud.wur, melk: oud.melk, bijgewerkt: oud.bijgewerkt };
+  let veranderd = false;
+  if (nieuw && nieuw.wur && nieuw.wur.datum && Number.isFinite(nieuw.wur.kvem) && (!S.prijzen || nieuw.wur.datum > oud.wur.datum)) { uit.wur = nieuw.wur; veranderd = true; }
+  if (nieuw && nieuw.melk && nieuw.melk.maand && Number.isFinite(nieuw.melk.eiwitwaarde) && (!S.prijzen || nieuw.melk.maand > oud.melk.maand)) { uit.melk = nieuw.melk; veranderd = true; }
+  if (veranderd) { uit.bijgewerkt = new Date().toISOString(); S.prijzen = uit; prijzenBewaren(); }
+  return veranderd;
+}
+async function prijzenOphalen(handmatig) {
+  if (!/^https?:/.test(location.protocol)) { if (handmatig) toast('Ophalen werkt alleen als de app vanaf de website is geïnstalleerd.'); return; }
+  try {
+    const r = await fetch('prijzen.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('status ' + r.status);
+    const veranderd = prijzenSamenvoegen(await r.json());
+    if (veranderd) { toast('Nieuwe prijzen opgehaald'); render(); }
+    else if (handmatig) toast('De prijzen zijn al de nieuwste');
+  } catch (e) { if (handmatig) toast('Ophalen lukt niet. Controleer of je internet hebt.'); }
+}
+function registreerSW() {
+  if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+function openPrijzenForm() {
+  const P = prijzen(), w = P.wur, m = P.melk, mv = w.mengvoer || {};
+  const veld = (id, label, waarde, hint, type = 'text') => `<div class="veld" data-veld="${id}"><label for="p-${id}">${label}</label><input id="p-${id}" name="${id}" ${type === 'text' ? 'inputmode="decimal"' : `type="${type}"`} autocomplete="off" value="${esc(type === 'text' ? invoer(waarde) : (waarde || ''))}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  openBlad(`${bladKop('Prijzen invullen')}
+    <p class="small muted">Neem de getallen over van de <a href="${BRON_WUR}" target="_blank" rel="noopener">WUR-pagina</a> en de <a href="${BRON_FC}" target="_blank" rel="noopener">Campina-garantieprijs</a>.</p>
+    <form class="form" id="prijsform" novalidate>
+      <fieldset><legend>Voederwaardeprijzen WUR</legend><div class="velden">
+        ${veld('wdatum', 'Datum', w.datum, '', 'date')}
+        ${veld('kvem', 'Energie', w.kvem, 'cent per kVEM2022')}
+        ${veld('dve', 'Eiwittoeslag', w.dveToeslag, 'cent per kg DVE')}
+        ${veld('m120', 'Brok 120 DVE', mv['120'], '€ per 100 kg')}
+        ${veld('m180', 'Brok 180 DVE', mv['180'], '€ per 100 kg')}
+      </div></fieldset>
+      <fieldset><legend>Melkprijs FrieslandCampina</legend><div class="velden">
+        ${veld('maand', 'Maand', m.maand, '', 'month')}
+        ${veld('garantie', 'Garantieprijs', m.garantieprijs, '€ per 100 kg')}
+        ${veld('eiwitw', 'Eiwitwaarde', m.eiwitwaarde, '€ per 100 kg eiwit')}
+        ${veld('vetw', 'Vetwaarde', m.vetwaarde, '€ per 100 kg vet')}
+        ${veld('stde', 'Standaard eiwit', m.stdEiwit, '%')}
+        ${veld('stdv', 'Standaard vet', m.stdVet, '%')}
+      </div></fieldset>
+      <div class="blad-voet"><button type="submit" class="btn prim">Opslaan</button><button type="button" class="btn" data-act="sluit">Annuleren</button></div>
+    </form>`, b => {
+    const f = b.querySelector('#prijsform');
+    f.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const g = k => num(f.elements[k].value.trim(), NaN);
+      const fouten = [];
+      const check = (k, ok, t) => { const v = f.querySelector(`[data-veld="${k}"]`); v.classList.remove('fout'); const o = v.querySelector('.fouttekst'); if (o) o.remove(); if (!ok) { fouten.push(k); v.classList.add('fout'); v.insertAdjacentHTML('beforeend', `<span class="fouttekst">${t}</span>`); } };
+      check('wdatum', /^\d{4}-\d{2}-\d{2}$/.test(f.elements.wdatum.value), 'Kies een datum.');
+      check('kvem', g('kvem') > 5 && g('kvem') < 80, 'Tussen 5 en 80 cent.');
+      check('dve', g('dve') > 0 && g('dve') < 400, 'Tussen 0 en 400 cent.');
+      check('maand', /^\d{4}-\d{2}$/.test(f.elements.maand.value), 'Kies een maand.');
+      check('garantie', g('garantie') > 10 && g('garantie') < 150, 'Vul de garantieprijs in.');
+      check('eiwitw', g('eiwitw') > 100, 'Vul de eiwitwaarde in.');
+      check('vetw', g('vetw') > 100, 'Vul de vetwaarde in.');
+      if (fouten.length) return;
+      const wd = f.elements.wdatum.value, md = f.elements.maand.value;
+      const wurHist = (w.historie || []).filter(h => h.datum !== wd).concat([{ datum: wd, kvem: g('kvem'), dve: g('dve') }]).sort((a, c) => a.datum < c.datum ? -1 : 1).slice(-12);
+      const melkHist = (m.historie || []).filter(h => h.maand !== md).concat([{ maand: md, garantieprijs: g('garantie') }]).sort((a, c) => a.maand < c.maand ? -1 : 1).slice(-6);
+      const mengvoer = Object.assign({}, mv);
+      if (Number.isFinite(g('m120'))) mengvoer['120'] = g('m120');
+      if (Number.isFinite(g('m180'))) mengvoer['180'] = g('m180');
+      S.prijzen = {
+        wur: Object.assign({}, w, { datum: wd, kvem: g('kvem'), dveToeslag: g('dve'), mengvoer, historie: wurHist, volgende: wd === w.datum ? w.volgende : '' }),
+        melk: Object.assign({}, m, { maand: md, garantieprijs: g('garantie'), eiwitwaarde: g('eiwitw'), vetwaarde: g('vetw'), stdEiwit: num(f.elements.stde.value, m.stdEiwit), stdVet: num(f.elements.stdv.value, m.stdVet), integraal: md === m.maand ? m.integraal : null, historie: melkHist }),
+        bijgewerkt: new Date().toISOString(),
+      };
+      prijzenBewaren();
+      sluitBlad(); toast('Prijzen opgeslagen'); render();
+    });
+  });
+}
+let backupWacht = null;
+async function backupMaken() {
+  const data = { app: 'rantsoen-voersaldo', versie: 1, gemaakt: new Date().toISOString(), bedrijven: S.bedrijven, voeders: S.alleVoeders, prijzen: S.prijzen };
+  const naam = 'rantsoen-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const tekst = JSON.stringify(data, null, 1);
+  const file = new File([tekst], naam, { type: 'application/json' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Back-up rantsoen' }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = naam;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('Back-up opgeslagen als ' + naam);
+}
+async function backupLezen(file) {
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (!d || d.app !== 'rantsoen-voersaldo' || !Array.isArray(d.bedrijven) || !Array.isArray(d.voeders)) throw new Error('vorm');
+    backupWacht = d; S.bevestig = 'import'; render();
+  } catch (e) { toast('Dit is geen back-up van deze app.'); }
+}
+function backupTerugzetten() {
+  const d = backupWacht; if (!d) return;
+  S.bedrijven = d.bedrijven; S.alleVoeders = d.voeders;
+  if (d.prijzen && d.prijzen.wur && d.prijzen.melk) prijzenSamenvoegen(d.prijzen);
+  backupWacht = null; S.bevestig = null; S.bedrijfId = null;
+  afleiden(); lokaalOpslaan(); toast('Back-up teruggezet'); render();
+}
+function nieuwId(naam) {
+  const basis = String(naam || 'voer').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'voer';
+  return basis + '-' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+}
+function uitSjabloon(key, volgorde) {
+  const t = SJABLONEN.find(s => s.key === key);
+  const v = { naam: t.naam, soort: t.soort, eenheid: t.eenheid, actief: true, bron: 'standaard', volgorde };
+  if (t.soort === 'mineraal') { v.huidig = t.huidig || 100; v.prijs = t.prijs; }
+  else {
+    ['ds', 'vem', 'dve', 'oeb', 'sw', 'prijs'].forEach(k => { v[k] = t[k]; });
+    v.huidig = 0; v.min = ''; v.max = t.max ?? '';
+    if (t.wurDve) { const m = prijzen().wur.mengvoer; v.prijs = m && m[t.wurDve] ? m[t.wurDve] : ''; v.wurDve = t.wurDve; }
+  }
+  if (key === 'leeg') v.bron = 'eigen';
+  return v;
+}
+function startsetMaken(bedrijfId) {
+  const voeders = [];
+  let mi = 0;
+  STARTSET.forEach((k, i) => {
+    const v = uitSjabloon(k, i + 1);
+    if (k === 'mineraal') { mi++; v.naam = 'Mineralen ' + mi; v.huidig = mi === 1 ? 100 : 50; v.prijs = mi === 1 ? 1.10 : 1.30; }
+    if (k === 'tgc') v.prijs = 120;
+    v.id = nieuwId(v.naam);
+    v.bedrijf = bedrijfId;
+    voeders.push(v);
+  });
+  const h = { graskuil: 24, maiskuil: 18, stro: 0.8, tgc: 8 };
+  voeders.forEach((v, i) => { const k = STARTSET[i]; if (h[k] !== undefined) v.huidig = h[k]; });
+  return voeders;
+}
+function nieuwBedrijfObject(naam, volgorde) {
+  return { id: nieuwId('bedrijf-' + naam), naam, logo: '', volgorde, ins: Object.assign({}, STANDAARD_INS) };
+}
+async function maakBedrijf(naam, begin) {
+  const volgorde = S.bedrijven.reduce((m, b) => Math.max(m, num(b.volgorde, 0)), 0) + 1;
+  const b = nieuwBedrijfObject(naam, volgorde);
+  const bron = huidigBedrijf();
+  if (begin === 'kopie' && bron) b.ins = Object.assign({}, STANDAARD_INS, bron.ins || {}, { voorbeeld: false });
+  let voeders = [];
+  if (begin === 'standaard') { voeders = startsetMaken(b.id); b.ins.voorbeeld = true; }
+  if (begin === 'kopie' && bron) {
+    voeders = S.alleVoeders.filter(v => v.bedrijf === bron.id).map(v => Object.assign({}, v, { id: nieuwId(v.naam), bedrijf: b.id }));
+  }
+  S.bedrijven.push(b);
+  S.alleVoeders.push(...voeders);
+  kiesBedrijf(b.id);
+  try {
+    await schrijf('bedrijven/' + b.id, bedrijfData(b));
+    for (const v of voeders) await schrijf('voeders/' + v.id, voerData(v));
+    toast('Bedrijf aangemaakt');
+  } catch (e) { /* melding al getoond */ }
+}
+function kiesBedrijf(id) {
+  S.bedrijfId = id; S.bevestig = null;
+  try { localStorage.setItem('rv-bedrijf', id); } catch (e) { /* geen opslag */ }
+  afleiden(); render();
+}
+async function verwijderBedrijf(id) {
+  const b = S.bedrijven.find(x => x.id === id); if (!b) return;
+  const voeders = S.alleVoeders.filter(v => v.bedrijf === id);
+  S.bedrijven = S.bedrijven.filter(x => x.id !== id);
+  S.alleVoeders = S.alleVoeders.filter(v => v.bedrijf !== id);
+  S.bedrijfId = null; afleiden(); kiesTab('rantsoen');
+  try {
+    for (const v of voeders) await verwijder('voeders/' + v.id);
+    await verwijder('bedrijven/' + id);
+    if (b.logo && assetsNs) await assetsNs.delete(b.logo).catch(() => {});
+    toast('Bedrijf verwijderd');
+  } catch (e) { /* melding al getoond */ }
+}
+
+// ---------- Logo ----------
+async function verkleinLogo(file, max) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * s)); c.height = Math.max(1, Math.round(img.naturalHeight * s));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function logoKiezen(file) {
+  const b = huidigBedrijf(); if (!b || !file) return;
+  if (!/^image\//.test(file.type || 'image/')) { toast('Kies een afbeelding (foto, PNG of JPG).'); return; }
+  toast('Logo wordt opgeslagen…');
+  try {
+    if (S.modus === 'db') {
+      if (!assetsNs) { toast('Logo uploaden kan alleen wie de app mag bewerken.'); return; }
+      const c = await verkleinLogo(file, 400);
+      const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+      const r = await assetsNs.upload(blob, { type: 'image/png' });
+      const oud = b.logo;
+      const nieuw = Object.assign({}, b, { logo: r.id, logoData: '' });
+      await bewaarBedrijf(nieuw);
+      if (oud) assetsNs.delete(oud).catch(() => {});
+    } else {
+      const c = await verkleinLogo(file, STANDALONE ? 256 : 160);
+      await bewaarBedrijf(Object.assign({}, b, { logoData: c.toDataURL('image/png'), logo: '' }));
+    }
+    toast('Logo opgeslagen');
+    render();
+  } catch (e) {
+    const c = e && e.code;
+    toast(c === 'too_large' ? 'Het bestand is te groot.' : c === 'unsupported_type' ? 'Dit soort bestand wordt niet ondersteund. Kies een PNG of JPG.' : 'Logo opslaan lukte niet. Probeer het opnieuw.');
+  }
+}
+async function logoWeg() {
+  const b = huidigBedrijf(); if (!b) return;
+  const oud = b.logo;
+  await bewaarBedrijf(Object.assign({}, b, { logo: '', logoData: '' })).catch(() => {});
+  if (oud && assetsNs) assetsNs.delete(oud).catch(() => {});
+  render();
+}
+
+// ===================== Weergave =====================
+function render() {
+  renderKop();
+  document.querySelectorAll('.tab').forEach(b => { if (b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  const v = $('#view');
+  if (S.modus === 'laden' || !(S.geladen.bedrijven && S.geladen.voeders)) return;
+  if (!S.bedrijven.length) { v.innerHTML = viewGeenBedrijf(); return; }
+  if (S.tab === 'bedrijf') {
+    const actief = document.activeElement;
+    if (actief && actief.closest && actief.closest('#koppelform')) return; // niet storen tijdens typen
+    v.innerHTML = viewKoppel();
+  } else if (S.tab === 'voeders') v.innerHTML = viewVoeders();
+  else if (S.tab === 'prijzen') v.innerHTML = viewPrijzen();
+  else if (S.tab === 'vergelijk') v.innerHTML = viewVergelijk();
+  else if (!S.voeders.length) v.innerHTML = viewLeeg();
+  else { v.innerHTML = viewRantsoen(); bindGrafiek(); }
+}
+
+function renderKop() {
+  const el = $('#koppelregel'), bk = $('#bedrijfkop');
+  const b = huidigBedrijf();
+  const zet = (node, html) => { if (node._html !== html) { node.innerHTML = html; node._html = html; } };
+  if (!b) { zet(el, ''); zet(bk, ''); return; }
+  zet(bk, `<button class="bedrijfknop" data-act="kies-bedrijf" aria-label="Bedrijf wisselen, nu ${esc(b.naam)}">${logoHtml(b)}<span class="bk-tekst"><span class="bnaam">${esc(b.naam || 'Naamloos bedrijf')}</span><span class="wissel">${S.bedrijven.length > 1 ? `Wissel van bedrijf (${S.bedrijven.length})` : 'Bedrijf toevoegen of wisselen'}</span></span></button>`);
+  const i = ins();
+  zet(el, `<span><b>${n(num(i.koeien, 0))}</b> koeien</span><span><b>${n(num(i.melk, 0), 1)}</b> kg melk</span><span><b>${n(num(i.vet, 0), 2)}%</b> vet</span><span><b>${n(num(i.eiwit, 0), 2)}%</b> eiwit</span>${S.tab !== 'bedrijf' && S.kanSchrijven ? '<button data-act="naar-koppel">Wijzig</button>' : ''}`);
+}
+
+function viewGeenBedrijf() {
+  return `<section class="leeg">
+    <h1>Nog geen bedrijf</h1>
+    <p>Maak eerst een melkveebedrijf aan. Per bedrijf leg je het koppel, de voeders met kuilanalyses en het rantsoen vast.</p>
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn prim" data-act="nieuw-bedrijf">Bedrijf aanmaken</button></div>' : '<p class="muted">Je hebt alleen leesrechten.</p>'}
+  </section>`;
+}
+
+function viewLeeg() {
+  return `<section class="leeg">
+    <h1>Nog geen voeders ingevoerd</h1>
+    <p>Hier komt het rantsoen van dit bedrijf: de voeders met hun kuilanalyse en prijs, het huidige rantsoen en het advies met het beste voersaldo.</p>
+    <p class="muted">Begin met graskuil, maïskuil, gehakseld stro, tarwegistconcentraat en twee mineralen, of voeg zelf voeders toe. Daarna pas je de waarden aan op de eigen analyses en prijzen.</p>
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn prim" data-act="startset">Begin met deze voeders</button><button class="btn" data-act="nieuw">Zelf een voer toevoegen</button></div>' : '<p class="muted">Je hebt alleen leesrechten.</p>'}
+  </section>`;
+}
+
+// ---------- Rantsoen ----------
+function berekenAlles() {
+  const i = ins();
+  const P = prijzen();
+  const H = huidigRantsoen(S.voeders, i);
+  const O = optimaal(S.voeders, i, num(i.melk, 28));
+  const eH = economie(H, i, P.melk);
+  const eO = O ? economie(O, i, P.melk) : null;
+  return { i, P, H, O, eH, eO };
+}
+
+function viewRantsoen() {
+  const { i, P, H, O, eH, eO } = berekenAlles();
+  const koeien = num(i.koeien, 0);
+  const voeders = gesorteerd();
+  const R = S.weergave === 'huidig' || !O ? H : O;
+  const e = S.weergave === 'huidig' || !O ? eH : eO;
+  let out = '';
+
+  if (i.voorbeeld && S.kanSchrijven) {
+    out += `<div class="melding info"><span class="stip"></span><div><b>Dit zijn voorbeeldwaarden.</b> Vul jullie eigen kuilanalyses, prijzen, melkgift en huidige rantsoen in; dan rekent de app met jullie bedrijf.
+      <div class="knoppen"><button class="btn klein" data-act="tab" data-tab="voeders">Voeders invullen</button><button class="btn klein" data-act="voorbeeld-weg">Melding sluiten</button></div></div></div>`;
+  }
+  if (!S.kanSchrijven) out += `<div class="melding info"><span class="stip"></span><div>Je kunt dit rantsoen bekijken maar niet wijzigen.</div></div>`;
+
+  // Kerncijfers
+  if (eO) {
+    const verschilDag = eO.saldo - eH.saldo;
+    const verschilMaand = verschilDag * koeien * 30.4;
+    const tekortHuidig = H.problemen.filter(p => p.ernst === 'kritiek');
+    let verschilUitleg = 'per maand voor het koppel';
+    if (verschilDag < -0.005 && tekortHuidig.length) verschilUitleg = 'het advies dekt de normen, het huidige rantsoen niet';
+    out += `<section class="tegels" aria-label="Kerncijfers">
+      <div class="tegel uitgelicht"><span class="label">Voersaldo advies</span><span class="waarde">${eur(eO.saldo)}</span><span class="sub">per koe per dag</span></div>
+      <div class="tegel"><span class="label">T.o.v. huidig</span><span class="waarde${verschilMaand < 0 ? ' neg' : ''}">${eurPlus(verschilMaand)}</span><span class="sub">${verschilUitleg}</span></div>
+      <div class="tegel"><span class="label">Voerkosten advies</span><span class="waarde">${eur(eO.per100)}</span><span class="sub">per 100 kg melk</span></div>
+    </section>`;
+  }
+
+  // Rantsoentabel
+  let rijen = '';
+  voeders.forEach(v => {
+    if (v.soort === 'mineraal') {
+      rijen += `<tr><td class="naam">${esc(v.naam)}<small>vaste gift</small></td><td class="n">${n(num(v.huidig, 0))} g</td><td class="n adv">${n(num(v.huidig, 0))} g</td></tr>`;
+      return;
+    }
+    const h = num(v.huidig, 0);
+    const a = O ? kgProduct(v, O.kgDs[v.id] || 0) : 0;
+    const uit = v.actief === false;
+    const sub = uit ? 'niet gebruiken in advies' : (num(v.max, null) !== null && v.max !== '' && O && Math.abs(a - num(v.max, 0)) < 0.05 ? 'op maximum' : '');
+    rijen += `<tr><td class="naam">${esc(v.naam)}${sub ? `<small>${sub}</small>` : ''}</td><td class="n">${n(h, 1)}</td><td class="n adv">${O ? n(a, 1) : '–'}</td></tr>`;
+  });
+  out += `<section class="panel">
+    <div class="sectie-kop"><h2>Rantsoen per koe per dag</h2><span class="small muted">kg product</span></div>
+    <div class="tabel-wrap"><table class="rt">
+      <thead><tr><th>Voer</th><th>Huidig</th><th class="adv">Advies</th></tr></thead>
+      <tbody>${rijen}</tbody>
+      <tfoot><tr><td>Droge stof</td><td class="n">${n(H.T.ds, 1)} kg</td><td class="n adv">${O ? n(O.T.ds, 1) + ' kg' : '–'}</td></tr>
+      <tr><td>Voerkosten</td><td class="n">${eur(eH.kosten)}</td><td class="n adv">${eO ? eur(eO.kosten) : '–'}</td></tr></tfoot>
+    </table></div>
+    ${S.kanSchrijven ? `<div class="knoppen"><button class="btn" data-act="huidig">Huidig rantsoen invullen</button>${O ? '<button class="btn mais" data-act="advies-vraag">Advies overnemen</button>' : ''}</div>` : ''}
+    ${S.bevestig === 'advies' ? `<div class="melding let"><span class="stip"></span><div>Het advies wordt jullie huidige rantsoen. De oude hoeveelheden worden overschreven.<div class="knoppen"><button class="btn klein prim" data-act="advies-ja">Ja, overnemen</button><button class="btn klein" data-act="advies-nee">Annuleren</button></div></div></div>` : ''}
+  </section>`;
+
+  // Normen en economie
+  const melkVem = melkUitVem(i, R.T.vem, R.T.dichtheid), melkDve = melkUitDve(i, R.T.dve);
+  out += `<section class="panel">
+    <div class="sectie-kop"><h2>Klopt het rantsoen?</h2>
+      <div class="segment" role="group" aria-label="Welk rantsoen"><button data-act="weergave" data-w="advies" aria-pressed="${R === O}">Advies</button><button data-act="weergave" data-w="huidig" aria-pressed="${R === H}">Huidig</button></div>
+    </div>
+    ${normMeters(R)}
+    <p class="dekt">Goed voor <b>${n(melkVem, 1)} kg</b> melk op energie en <b>${n(melkDve, 1)} kg</b> op eiwit. Jullie koeien geven ${n(num(i.melk, 0), 1)} kg.</p>
+    ${R.problemen.length ? `<div class="meldingen">${R.problemen.map(p => `<div class="melding ${p.ernst}"><span class="stip"></span><div>${esc(p.tekst)}${tipBij(p)}</div></div>`).join('')}</div>` : ''}
+    <h3>Melkgeld en voerkosten</h3>
+    <dl class="kv">
+      <dt>Melkprijs bij ${n(num(i.vet, 0), 2)}% vet en ${n(num(i.eiwit, 0), 2)}% eiwit</dt><dd>${eur(e.prijs * 100)} <span class="muted small">/100 kg</span></dd>
+      <dt>Melkgeld per koe per dag</dt><dd>${eur(e.melkgeld)}</dd>
+      <dt>Voerkosten per koe per dag</dt><dd>${eur(e.kosten)}</dd>
+      <dt>Voerkosten per 100 kg melk</dt><dd>${eur(e.per100)}</dd>
+      <dt class="tot">Voersaldo per koe per dag</dt><dd class="tot">${eur(e.saldo)}</dd>
+    </dl>
+    <p class="small muted">Koppel: ${eur(e.saldo * koeien * 30.4, 0)} voersaldo per maand (${n(koeien)} koeien × 30,4 dagen). Melkprijs: Campina-garantieprijs ${maandNL(P.melk.maand)}${num(i.toeslag, 0) ? `, ${eurPlus(num(i.toeslag, 0), 2)} toeslag per 100 kg` : ''}.</p>
+  </section>`;
+
+  // Loont meer melk?
+  out += viewCurve(i, P);
+
+  // Mengwagen
+  let mw = '';
+  voeders.forEach(v => {
+    if (v.soort === 'mineraal') { const kg = num(v.huidig, 0) / 1000 * koeien; if (kg > 0) mw += `<dt>${esc(v.naam)}</dt><dd>${n(kg, 1)} kg</dd>`; return; }
+    const kgp = R === O ? kgProduct(v, O.kgDs[v.id] || 0) : num(v.huidig, 0);
+    const tot = kgp * koeien;
+    if (tot > 0.5) mw += `<dt>${esc(v.naam)}</dt><dd>${n(tot >= 100 ? Math.round(tot / 10) * 10 : tot, tot >= 100 ? 0 : 1)} kg</dd>`;
+  });
+  out += `<section class="panel">
+    <div class="sectie-kop"><h2>Mengwagen</h2><span class="small muted">${R === O ? 'advies' : 'huidig rantsoen'}, ${n(koeien)} koeien</span></div>
+    ${mw ? `<dl class="kv">${mw}</dl><p class="small muted">Zonder restvoer. Tel er 2 tot 3% bij voor wat er aan het voerhek overblijft.</p>` : '<p class="muted">Nog geen hoeveelheden.</p>'}
+  </section>`;
+  return out;
+}
+
+function tipBij(p) {
+  const heeft = s => S.voeders.some(v => v.soort === s && v.actief !== false);
+  if (p.key === 'dve') return heeft('krachtvoer') ? ' Verhoog het maximum van een eiwitrijk voer of verlaag de melkgift.' : ' Voeg een eiwitrijk voer toe (bijv. eiwitrijke brok) of verhoog het maximum van tarwegistconcentraat.';
+  if (p.key === 'vem') return ' Voeg een energierijk voer toe of verlaag de melkgift.';
+  if (p.key === 'sw') return ' Meer stro of graskuil geeft meer structuur.';
+  if (p.key === 'dsMax') return ' Gebruik voer met meer energie per kg droge stof.';
+  return '';
+}
+
+function normMeters(R) {
+  const B = R.B, T = R.T;
+  const rij = (naam, eenh, waardeTekst, status, min, max, bandVan, bandTot, waarde) => {
+    const span = max - min;
+    const pos = x => Math.max(0, Math.min(100, (x - min) / span * 100));
+    const pilTekst = { ok: 'goed', let: status === 'let' && waarde > bandTot ? 'hoog' : 'laag', kritiek: waarde < bandVan ? 'tekort' : 'te hoog' }[status];
+    return `<div class="norm"><span class="nm">${naam}<small>${eenh}</small><span class="pil ${status}">${pilTekst}</span></span><span class="wd">${waardeTekst}</span>
+      <div class="meter" role="img" aria-label="${naam}: ${waardeTekst}, ${pilTekst}"><div class="band" style="left:${pos(bandVan)}%;width:${Math.max(1, pos(bandTot) - pos(bandVan))}%"></div><div class="vul ${status}" style="width:${pos(waarde)}%"></div></div></div>`;
+  };
+  const pV = T.vem / B.vem * 100, pD = T.dve / B.dve * 100;
+  const sV = pV < 99 ? 'kritiek' : T.vem > B.vemMax * 1.005 ? 'let' : 'ok';
+  const sD = pD < 99 ? 'kritiek' : pD > 115 ? 'let' : 'ok';
+  const sO = T.oeb < B.oebMin - 5 ? 'kritiek' : T.oeb > B.oebMax + 5 ? 'let' : 'ok';
+  const sDs = T.ds > B.dsMax + 0.05 ? 'kritiek' : T.ds < B.dsMin - 0.05 ? 'let' : 'ok';
+  const sSw = T.sw < B.swMin - 0.02 ? 'kritiek' : 'ok';
+  const oebMin = Math.min(-200, T.oeb - 50), oebMax = Math.max(B.oebMax + 200, T.oeb + 50);
+  return `<div class="normen">
+    ${rij('Energie', 'VEM2022', `${n(pV)}% · ${n(T.vem)} van ${n(B.vem)}`, sV, 60, 130, 100, 100 + num(ins().vemMarge, 5), pV)}
+    ${rij('Eiwit', 'DVE', `${n(pD)}% · ${n(T.dve)} van ${n(B.dve)} g`, sD, 60, 130, 100, 115, pD)}
+    ${rij('Pensbalans', 'OEB', `${n(T.oeb)} g (${n(B.oebMin)} tot ${n(B.oebMax)})`, sO, oebMin, oebMax, B.oebMin, B.oebMax, T.oeb)}
+    ${rij('Droge stof', 'opname', `${n(T.ds, 1)} kg (${n(B.dsMin, 1)} tot ${n(B.dsMax, 1)})`, sDs, 10, 30, B.dsMin, B.dsMax, T.ds)}
+    ${rij('Structuur', 'SW per kg DS', `${n(T.sw, 2)} (minimaal ${n(B.swMin, 2)})`, sSw, 0, 3, B.swMin, 3, T.sw)}
+  </div>`;
+}
+
+// ---------- Grafiek: loont meer melk? ----------
+let curveData = null;
+function viewCurve(i, P) {
+  const pts = saldoCurve(S.voeders, i, P.melk);
+  curveData = pts;
+  if (pts.length < 3) return '';
+  const m0 = Math.round(num(i.melk, 28));
+  const haalbaar = pts.filter(p => p.haalbaar);
+  const beste = haalbaar.length ? haalbaar.reduce((a, b) => (b.saldo > a.saldo ? b : a)) : null;
+  const nu = pts.find(p => p.melk === m0);
+  const volgende = pts.find(p => p.melk === m0 + 1);
+  const prijsKg = melkprijsPerKg(i, P.melk);
+  let zin = '';
+  if (nu && volgende && volgende.haalbaar) {
+    const extraKost = volgende.kosten - nu.kosten;
+    zin = `Van ${m0} naar ${m0 + 1} kg melk kost <b>${eur(extraKost)}</b> extra voer en levert <b>${eur(prijsKg)}</b> extra melkgeld op. ${extraKost < prijsKg ? 'Meer melk loont, als de koeien die melk kunnen geven.' : 'Meer melk loont niet: het extra voer kost meer dan de melk opbrengt.'}`;
+  } else if (nu && volgende && !volgende.haalbaar) {
+    const R1 = optimaal(S.voeders, i, m0 + 1);
+    const reden = R1 && R1.problemen.find(p => p.ernst === 'kritiek');
+    zin = `Met deze voeders is ${m0 + 1} kg melk niet haalbaar binnen de normen${reden ? ` (${esc(reden.tekst.toLowerCase())})` : ''}.`;
+  }
+  // SVG
+  const W = 340, H = 204, L = 44, Rr = 12, T = 14, Bm = 42;
+  const xs = pts.map(p => p.melk), ys = pts.map(p => p.saldo);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  let yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const stap = niceStap((yMax - yMin) / 4 || 1);
+  yMin = Math.floor(yMin / stap) * stap; yMax = Math.ceil(yMax / stap) * stap;
+  if (yMax === yMin) yMax = yMin + stap;
+  const X = x => L + (x - xMin) / (xMax - xMin) * (W - L - Rr);
+  const Y = y => T + (1 - (y - yMin) / (yMax - yMin)) * (H - T - Bm);
+  let grid = '';
+  for (let y = yMin; y <= yMax + 1e-9; y += stap) grid += `<line x1="${L}" x2="${W - Rr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${Y(y) + 4}" text-anchor="end">€ ${n(y, stap < 1 ? 1 : 0)}</text>`;
+  let xt = '';
+  for (let x = Math.ceil(xMin / 2) * 2; x <= xMax; x += 2) xt += `<text x="${X(x)}" y="${H - Bm + 16}" text-anchor="middle">${x}</text>`;
+  pts.forEach(p => { p.px = X(p.melk); p.py = Y(p.saldo); });
+  const pad = arr => arr.map((p, k) => `${k ? 'L' : 'M'}${X(p.melk).toFixed(1)},${Y(p.saldo).toFixed(1)}`).join('');
+  const segOk = [], segNiet = [];
+  pts.forEach((p, k) => {
+    if (k === 0) return;
+    const a = pts[k - 1];
+    (a.haalbaar && p.haalbaar ? segOk : segNiet).push(`M${X(a.melk).toFixed(1)},${Y(a.saldo).toFixed(1)}L${X(p.melk).toFixed(1)},${Y(p.saldo).toFixed(1)}`);
+  });
+  const area = haalbaar.length > 1 ? `<path d="${pad(haalbaar)}L${X(haalbaar[haalbaar.length - 1].melk)},${H - Bm}L${X(haalbaar[0].melk)},${H - Bm}Z" fill="var(--mais-strong)" opacity=".14"/>` : '';
+  const merkNu = nu ? `<circle cx="${X(nu.melk)}" cy="${Y(nu.saldo)}" r="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><text class="ink" x="${X(nu.melk)}" y="${Y(nu.saldo) + 20}" text-anchor="middle">nu</text>` : '';
+  const merkBeste = beste && (!nu || beste.melk !== nu.melk) ? `<circle cx="${X(beste.melk)}" cy="${Y(beste.saldo)}" r="6" fill="var(--mais-strong)" stroke="var(--surface)" stroke-width="2"/><text class="ink" x="${X(beste.melk)}" y="${Y(beste.saldo) - 12}" text-anchor="middle">hoogste haalbaar</text>` : '';
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Voersaldo per koe per dag bij ${xMin} tot ${xMax} kg melk">
+    ${grid}${xt}<text x="${(L + W - Rr) / 2}" y="${H - 4}" text-anchor="middle">kg melk per koe per dag</text>
+    ${area}
+    <path d="${segNiet.join('')}" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="4 4"/>
+    <path d="${segOk.join('')}" fill="none" stroke="var(--mais-strong)" stroke-width="2.5" stroke-linecap="round"/>
+    ${merkBeste}${merkNu}
+    <line id="kruis" x1="0" x2="0" y1="${T}" y2="${H - Bm}" stroke="var(--ink-3)" stroke-width="1" visibility="hidden"/>
+    <circle id="kruis-punt" r="5" fill="var(--ink)" visibility="hidden"/>
+    <rect id="grafiek-vlak" x="${L}" y="0" width="${W - L - Rr}" height="${H - Bm}" fill="transparent" data-x0="${xMin}" data-x1="${xMax}"/>
+  </svg>`;
+  const tabel = pts.map(p => `<tr><td>${p.melk} kg</td><td class="n">${eur(p.kosten)}</td><td class="n">${eur(p.saldo)}</td><td>${p.haalbaar ? 'ja' : 'nee'}</td></tr>`).join('');
+  return `<section class="panel">
+    <div class="sectie-kop"><h2>Loont het om op meer melk te voeren?</h2></div>
+    <p class="small muted">Voersaldo per koe per dag bij het goedkoopste rantsoen voor elke melkgift. Gestippeld: niet haalbaar binnen de normen met deze voeders.</p>
+    <div class="grafiek" id="grafiek" data-l="${L}" data-w="${W}" data-r="${Rr}" data-h="${H}">${svg}<div class="tip" id="grafiek-tip" hidden></div></div>
+    ${zin ? `<p>${zin}</p>` : ''}
+    <details class="tabelweergave"><summary>Als tabel</summary><div class="tabel-wrap"><table class="rt"><thead><tr><th>Melk</th><th>Voerkosten</th><th>Voersaldo</th><th>Haalbaar</th></tr></thead><tbody>${tabel}</tbody></table></div></details>
+  </section>`;
+}
+function niceStap(r) { const p = Math.pow(10, Math.floor(Math.log10(r))); const f = r / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+function bindGrafiek() {
+  const box = $('#grafiek'); if (!box || !curveData) return;
+  const svg = box.querySelector('svg'), vlak = box.querySelector('#grafiek-vlak'), tip = box.querySelector('#grafiek-tip');
+  const kruis = box.querySelector('#kruis'), punt = box.querySelector('#kruis-punt');
+  const pts = curveData;
+  const x0 = +vlak.dataset.x0, x1 = +vlak.dataset.x1;
+  const L = +box.dataset.l, W = +box.dataset.w, Rr = +box.dataset.r;
+  const toon = ev => {
+    const r = svg.getBoundingClientRect();
+    const sx = (ev.clientX - r.left) / r.width * W;
+    const melk = Math.round(x0 + (sx - L) / (W - L - Rr) * (x1 - x0));
+    const p = pts.find(q => q.melk === melk); if (!p) return;
+    const cx = p.px, cy = p.py;
+    kruis.setAttribute('x1', cx); kruis.setAttribute('x2', cx); kruis.setAttribute('visibility', 'visible');
+    punt.setAttribute('cx', cx); punt.setAttribute('cy', cy); punt.setAttribute('visibility', 'visible');
+    tip.hidden = false;
+    tip.innerHTML = `${p.melk} kg melk · saldo ${eur(p.saldo)}<br>voerkosten ${eur(p.kosten)}${p.haalbaar ? '' : ' · niet haalbaar'}`;
+    tip.style.left = Math.max(80, Math.min(r.width - 80, cx / W * r.width)) + 'px';
+    tip.style.top = (cy / +box.dataset.h * r.height) + 'px';
+  };
+  const weg = () => { tip.hidden = true; kruis.setAttribute('visibility', 'hidden'); punt.setAttribute('visibility', 'hidden'); };
+  vlak.addEventListener('pointermove', toon);
+  vlak.addEventListener('pointerdown', toon);
+  vlak.addEventListener('pointerleave', weg);
+}
+
+// ---------- Voeders ----------
+function viewVoeders() {
+  const P = prijzen();
+  const lijst = gesorteerd();
+  const { O, i } = (() => { const a = berekenAlles(); return { O: a.O, i: a.i }; })();
+  const koeien = num(i.koeien, 0);
+  const groepen = [['ruwvoer', 'Ruwvoer'], ['bijproduct', 'Bijproducten'], ['krachtvoer', 'Krachtvoer'], ['mineraal', 'Mineralen']];
+  let out = `<div class="sectie-kop"><h1>Voeders en kuilen</h1>${S.kanSchrijven ? '<button class="btn prim" data-act="nieuw">Voer of kuil toevoegen</button>' : ''}</div>
+    <p class="small muted">Tik op een voer om de analyse, prijs of grenzen aan te passen. Elke nieuwe kuil voeg je apart toe, bijvoorbeeld "Graskuil 1e snede 2026".</p>`;
+  groepen.forEach(([s, titel]) => {
+    const vs = lijst.filter(v => (v.soort || 'bijproduct') === s);
+    if (!vs.length) return;
+    out += `<section class="groep"><h2>${titel}</h2>${vs.map(v => voerKaart(v, P, O, koeien)).join('')}</section>`;
+  });
+  if (!lijst.length) out += viewLeeg();
+  return out;
+}
+function voerKaart(v, P, O, koeien) {
+  const uit = v.actief === false;
+  if (v.soort === 'mineraal') {
+    return `<button class="voerkaart" data-act="bewerk" data-id="${esc(v.id)}"${S.kanSchrijven ? '' : ' disabled'}>
+      <span class="vk-kop"><span class="vk-naam">${esc(v.naam)}</span><span class="vk-bron">vaste gift</span></span>
+      <span class="vk-voet"><span><b>${n(num(v.huidig, 0))} g</b> per koe per dag</span><span><b>${num(v.prijs, null) !== null && v.prijs !== '' ? eur(num(v.prijs, 0)) : 'geen prijs'}</b> per kg</span><span><b>${eur(mineraalKosten(v))}</b> per koe per dag</span></span>
+    </button>`;
+  }
+  const vwp = voederwaardePrijs(v, P.wur);
+  const ptp = prijsPerTonProduct(v);
+  const pct = vwp > 0 && ptp > 0 ? ptp / vwp * 100 : null;
+  const bron = v.analyse ? `analyse ${datumNL(v.analyse)}` : v.bron === 'standaard' ? 'standaardwaarden' : 'eigen waarden';
+  let voorraad = '';
+  if (num(v.voorraad, 0) > 0) {
+    const perDag = (O && v.actief !== false ? kgProduct(v, O.kgDs[v.id] || 0) : num(v.huidig, 0)) * koeien;
+    voorraad = perDag > 0 ? `<span>voorraad: <b>${n(num(v.voorraad, 0) * 1000 / perDag)} dagen</b></span>` : `<span>voorraad: <b>${n(num(v.voorraad, 0), 0)} ton</b></span>`;
+  }
+  const grenzen = [];
+  if (v.min !== '' && v.min != null && num(v.min, 0) > 0) grenzen.push('min ' + n(num(v.min, 0), 1));
+  if (v.max !== '' && v.max != null) grenzen.push('max ' + n(num(v.max, 0), 1));
+  return `<button class="voerkaart${uit ? ' uit' : ''}" data-act="bewerk" data-id="${esc(v.id)}"${S.kanSchrijven ? '' : ' disabled'}>
+    <span class="vk-kop"><span class="vk-naam">${esc(v.naam)}</span><span class="vk-bron${v.bron === 'standaard' && !v.analyse ? ' std' : ''}">${bron}</span></span>
+    <span class="analyse" aria-label="Voederwaarde per kg droge stof">
+      <span class="cel"><em>DS</em><b>${n(num(v.ds, 0))}%</b></span><span class="cel"><em>VEM</em><b>${n(num(v.vem, 0))}</b></span><span class="cel"><em>DVE</em><b>${n(num(v.dve, 0))}</b></span><span class="cel"><em>OEB</em><b>${n(num(v.oeb, 0))}</b></span><span class="cel"><em>SW</em><b>${n(num(v.sw, 0), 2)}</b></span>
+    </span>
+    <span class="vk-voet">
+      <span><b>${num(v.prijs, null) !== null && v.prijs !== '' ? eur(num(v.prijs, 0)) : 'geen prijs'}</b> ${esc((EENHEDEN[v.eenheid] || '').replace('€ ', ''))}</span>
+      ${pct ? `<span class="chip ${pct <= 100 ? 'goed' : 'duur'}">${n(pct)}% van voederwaarde</span>` : ''}
+      ${uit ? '<span class="chip">niet in advies</span>' : ''}
+      ${grenzen.length ? `<span>${grenzen.join(' · ')} kg/koe</span>` : ''}
+      ${voorraad}
+    </span>
+  </button>`;
+}
+
+// ---------- Koppel ----------
+function viewKoppel() {
+  const i = ins();
+  const ro = S.kanSchrijven ? '' : ' disabled';
+  const veld = (id, label, waarde, hint, cls = '', attr = '') => `<div class="veld${cls}"><label for="k-${id}">${label}</label><input id="k-${id}" name="${id}" inputmode="decimal" autocomplete="off" value="${esc(invoer(waarde))}"${ro}${attr}>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const B = behoefte(i, num(i.melk, 28), 970);
+  const b = huidigBedrijf();
+  const magLogo = S.kanSchrijven && (S.modus !== 'db' || assetsNs);
+  return `<h1>Bedrijf en koppel</h1>
+  <form class="form" id="koppelform" autocomplete="off">
+    <section class="panel"><fieldset><legend>Bedrijf</legend>
+      <div class="veld"><label for="k-naam">Bedrijfsnaam</label><input id="k-naam" name="naam" autocomplete="off" value="${esc(b.naam || '')}" placeholder="bijv. Melkveebedrijf De Hoeve"${ro}></div>
+      <div class="logoregel">${logoHtml(b, 'logo groot')}
+        <div class="logoknoppen">
+          ${magLogo ? `<label class="btn klein" for="logo-input">${b.logo || b.logoData ? 'Ander logo kiezen' : 'Logo kiezen'}</label><input type="file" id="logo-input" accept="image/*" class="verborgen">${b.logo || b.logoData ? '<button type="button" class="btn klein" data-act="logo-weg">Logo verwijderen</button>' : ''}` : ''}
+          <span class="hint small muted">${magLogo ? 'Foto of afbeelding (PNG, JPG). Wordt verkleind opgeslagen.' : 'Een logo toevoegen kan alleen wie de app mag bewerken.'}</span>
+        </div>
+      </div>
+    </fieldset></section>
+
+    <section class="panel"><fieldset><legend>Koppel</legend>
+      <div class="velden">
+        ${veld('koeien', 'Melkkoeien', i.koeien, '')}
+        ${veld('melk', 'Melk per koe per dag', i.melk, 'kg (1 liter ≈ 1,03 kg)')}
+        ${veld('vet', 'Vetgehalte', i.vet, '%')}
+        ${veld('eiwit', 'Eiwitgehalte', i.eiwit, '%')}
+        ${veld('lg', 'Lichaamsgewicht', i.lg, 'kg, gemiddeld')}
+        <div class="veld"><label for="k-beweiding">Beweiding</label><select id="k-beweiding" name="beweiding"${ro}>
+          <option value="stal"${i.beweiding === 'stal' ? ' selected' : ''}>Op stal</option>
+          <option value="beperkt"${i.beweiding === 'beperkt' ? ' selected' : ''}>Beperkt weiden</option>
+          <option value="weide"${i.beweiding === 'weide' ? ' selected' : ''}>Dag en nacht weiden</option></select></div>
+      </div>
+      <p class="small muted" id="behoefte-regel">Behoefte bij ${n(num(i.melk, 0), 1)} kg melk: ${n(B.vem)} VEM2022 en ${n(B.dve)} g DVE per koe per dag (${n(B.fpcm, 1)} kg meetmelk).</p>
+    </fieldset></section>
+
+    <section class="panel"><fieldset><legend>Melkgeld</legend>
+      <div class="velden">
+        ${veld('toeslag', 'Toeslagen min inhoudingen', i.toeslag, '€ per 100 kg, bovenop de garantieprijs', ' vol')}
+      </div>
+      <p class="small muted">Rekent met de eiwit- en vetwaarde van de Campina-garantieprijs.${prijzen().melk.integraal ? ` Bij maximale toeslagen (Foqus planet, kwantum) kwam de integrale prijs voor ${maandNL(prijzen().melk.maand)} ${eur(prijzen().melk.integraal - prijzen().melk.garantieprijs)} per 100 kg hoger uit.` : ''}</p>
+    </fieldset></section>
+
+    <section class="panel"><fieldset><legend>Normen voor het advies</legend>
+      <label class="vink"><input type="checkbox" id="k-dsAuto" name="dsAuto"${i.dsAuto !== false ? ' checked' : ''}${ro}> Droge-stofopname automatisch schatten</label>
+      <div class="velden">
+        ${veld('dsOpname', 'Droge-stofopname', i.dsAuto !== false ? Math.round(dsAutoVoor(num(i.melk, 28)) * 10) / 10 : i.dsOpname, 'kg DS per koe per dag', '', i.dsAuto !== false ? ' readonly' : '')}
+        ${veld('swMin', 'Structuurwaarde minimaal', i.swMin, 'per kg DS')}
+        ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag')}
+        ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag')}
+        ${veld('vemMarge', 'Energie boven behoefte', i.vemMarge, '% dat maximaal mag')}
+      </div>
+      <label class="vink"><input type="checkbox" id="k-jeugd" name="jeugd"${i.jeugd !== false ? ' checked' : ''}${ro}> Toeslag jeugdgroei (330 VEM, 37 g DVE, koppelgemiddelde)</label>
+      <div class="velden">
+        ${veld('extraVem', 'Extra toeslag VEM', i.extraVem, 'bijv. dracht')}
+        ${veld('extraDve', 'Extra toeslag DVE', i.extraDve, 'g')}
+      </div>
+    </fieldset></section>
+  </form>
+  <section class="panel">
+    <details class="uitleg"><summary>Hoe rekent de app?</summary>
+      <p>De behoefte volgt de CVB-normen met VEM2022:</p>
+      <ul>
+        <li>Onderhoud: <code>53,0 × LG^0,75</code> VEM2022, gecorrigeerd voor de energiedichtheid van het rantsoen (61,0 bij beperkt en 68,9 bij dag en nacht weiden).</li>
+        <li>Melk: <code>390 × meetmelk</code> VEM2022. Meetmelk = kg melk × (0,337 + 0,116 × vet% + 0,06 × eiwit%).</li>
+        <li>DVE: <code>54 + 0,1 × LG + 1,396 × E + 0,000195 × E²</code>, met E = gram melkeiwit per dag.</li>
+        <li>Droge-stofopname: 18,5 kg bij 20 kg melk en 23,5 kg bij 40 kg melk (Handboek Melkveehouderij), met 1,5 kg ruimte omlaag en 0,5 kg omhoog.</li>
+      </ul>
+      <p>Het advies is het goedkoopste rantsoen uit jullie voeders dat aan alle normen voldoet (lineaire programmering). Lukt dat niet, dan zoekt de app het rantsoen dat er het dichtst bij komt en zegt wat er ontbreekt. Mineralen tellen mee als vaste gift.</p>
+      <p>Melkgeld = kg melk × (eiwit% × eiwitwaarde + vet% × vetwaarde) uit de Campina-garantieprijs, plus jullie toeslag. Voersaldo = melkgeld min voerkosten.</p>
+      <p>Het is een rekenhulp. Bespreek grote wijzigingen in het rantsoen met jullie voeradviseur.</p>
+    </details>
+  </section>
+  ${STANDALONE ? `<section class="panel">
+    <h3>Back-up</h3>
+    <p class="small muted">Alle bedrijven, voeders en rantsoenen staan alleen op deze telefoon. Maak regelmatig een back-up en bewaar die bijvoorbeeld in je mail of cloudopslag. Met een back-up zet je alles ook over naar een andere telefoon.</p>
+    <div class="knoppen"><button class="btn" data-act="backup-maken">Back-up maken</button><label class="btn" for="backup-input">Back-up terugzetten</label><input type="file" id="backup-input" accept=".json,application/json" class="verborgen"></div>
+    ${S.bevestig === 'import' && backupWacht ? `<div class="melding kritiek"><span class="stip"></span><div>De back-up van ${datumNL(String(backupWacht.gemaakt || '').slice(0, 10))} bevat ${backupWacht.bedrijven.length} bedrijven en ${backupWacht.voeders.length} voeders. Alles wat nu op deze telefoon staat wordt vervangen.<div class="knoppen"><button class="btn klein gevaar" data-act="import-ja">Ja, terugzetten</button><button class="btn klein" data-act="import-nee">Annuleren</button></div></div></div>` : ''}
+  </section>` : ''}
+  ${S.kanSchrijven ? `<section class="panel">
+    <h3>Bedrijf verwijderen</h3>
+    <p class="small muted">Verwijdert ${esc(b.naam || 'dit bedrijf')} met alle voeders, kuilanalyses en het rantsoen. Dit kan niet ongedaan worden gemaakt.</p>
+    <div id="bedrijf-weg-plek">${S.bevestig === 'bedrijf-weg'
+      ? `<div class="melding kritiek"><span class="stip"></span><div>Weet je het zeker? ${esc(b.naam || 'Dit bedrijf')} en ${S.voeders.length} voeders worden verwijderd.<div class="knoppen"><button class="btn klein gevaar" data-act="bedrijf-weg-ja">Ja, verwijder</button><button class="btn klein" data-act="bedrijf-weg-nee">Nee</button></div></div></div>`
+      : '<button class="btn gevaar klein" data-act="bedrijf-weg-vraag">Bedrijf verwijderen</button>'}</div>
+  </section>` : ''}`;
+}
+function leesKoppelForm() {
+  const f = $('#koppelform'); if (!f) return;
+  const nieuw = Object.assign({}, ins());
+  ['koeien', 'melk', 'vet', 'eiwit', 'lg', 'toeslag', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'extraVem', 'extraDve'].forEach(k => {
+    const el = f.elements[k]; if (!el) return;
+    const raw = el.value.trim();
+    if (raw === '' && ['toeslag', 'extraVem', 'extraDve', 'oebMin'].includes(k)) { nieuw[k] = 0; return; }
+    const x = num(raw, NaN);
+    if (Number.isFinite(x)) nieuw[k] = x;
+  });
+  nieuw.beweiding = f.elements.beweiding.value;
+  nieuw.dsAuto = f.elements.dsAuto.checked;
+  nieuw.jeugd = f.elements.jeugd.checked;
+  const dsEl = f.elements.dsOpname;
+  if (nieuw.dsAuto) { dsEl.value = invoer(Math.round(dsAutoVoor(num(nieuw.melk, 28)) * 10) / 10); dsEl.readOnly = true; }
+  else dsEl.readOnly = false;
+  if (S.ins && S.ins.voorbeeld) nieuw.voorbeeld = true;
+  S.ins = nieuw;
+  const b = huidigBedrijf();
+  if (b && f.elements.naam) b.naam = f.elements.naam.value.trim();
+  renderKop();
+  const br = $('#behoefte-regel');
+  if (br) { const B = behoefte(nieuw, num(nieuw.melk, 28), 970); br.textContent = `Behoefte bij ${n(num(nieuw.melk, 0), 1)} kg melk: ${n(B.vem)} VEM2022 en ${n(B.dve)} g DVE per koe per dag (${n(B.fpcm, 1)} kg meetmelk).`; }
+  bewaarIns(false);
+}
+
+// ---------- Vergelijken ----------
+const KENGETALLEN = {
+  saldo: { label: 'Voersaldo', titel: 'Voersaldo per koe per dag', hoogGoed: true, fmt: x => eur(x) },
+  per100: { label: 'Voerkosten', titel: 'Voerkosten per 100 kg melk', hoogGoed: false, fmt: x => eur(x) },
+  melk: { label: 'Melk', titel: 'Melk per koe per dag', hoogGoed: true, fmt: x => n(x, 1) + ' kg' },
+  extra: { label: 'Kans', titel: 'Extra voersaldo per maand met het advies', hoogGoed: true, fmt: x => eurPlus(x) },
+};
+function kengetallen(b) {
+  const voeders = S.alleVoeders.filter(v => v.bedrijf === b.id);
+  const i = Object.assign({}, STANDAARD_INS, b.ins || {});
+  const P = prijzen();
+  const H = huidigRantsoen(voeders, i);
+  const O = voeders.length ? optimaal(voeders, i, num(i.melk, 28)) : null;
+  const eH = economie(H, i, P.melk), eO = O ? economie(O, i, P.melk) : null;
+  const koeien = num(i.koeien, 0);
+  const tekort = H.problemen.filter(p => p.ernst === 'kritiek');
+  return {
+    b, i, koeien, voeders: voeders.length, melk: num(i.melk, 0), per100: eH.per100, saldo: eH.saldo, kosten: eH.kosten,
+    saldoMaand: eH.saldo * koeien * 30.4,
+    extra: eO ? (eO.saldo - eH.saldo) * koeien * 30.4 : null,
+    tekort, adviesOk: O ? !O.problemen.some(p => p.ernst === 'kritiek') : false,
+    dveDekking: H.B.dve > 0 ? H.T.dve / H.B.dve * 100 : 0, vemDekking: H.B.vem > 0 ? H.T.vem / H.B.vem * 100 : 0,
+  };
+}
+function viewVergelijk() {
+  const rijen = bedrijvenGesorteerd().map(kengetallen);
+  const k = KENGETALLEN[S.kengetal] || KENGETALLEN.saldo;
+  const metData = rijen.filter(r => r.voeders > 0 && Number.isFinite(r[S.kengetal]));
+  const gesorteerd = metData.slice().sort((a, b) => k.hoogGoed ? b[S.kengetal] - a[S.kengetal] : a[S.kengetal] - b[S.kengetal]);
+  const vals = gesorteerd.map(r => r[S.kengetal]);
+  const maxAbs = Math.max(1e-9, ...vals.map(Math.abs));
+  const heeftNeg = vals.some(v => v < 0);
+  const P = prijzen();
+  let out = `<div class="sectie-kop"><h1>Bedrijven vergelijken</h1>${S.kanSchrijven ? '<button class="btn" data-act="nieuw-bedrijf">Bedrijf toevoegen</button>' : ''}</div>
+  <p class="small muted">Op basis van het huidige rantsoen van elk bedrijf, met dezelfde prijzen: WUR ${datumNL(P.wur.datum)} en de Campina-melkprijs van ${maandNL(P.melk.maand)}.</p>`;
+  if (rijen.length < 2) out += `<div class="melding info"><span class="stip"></span><div>Er is nog maar één bedrijf. Voeg een tweede bedrijf toe om te vergelijken.</div></div>`;
+  out += `<section class="panel">
+    <div class="segment segment-breed" role="group" aria-label="Kengetal">${Object.entries(KENGETALLEN).map(([key, x]) => `<button data-act="kengetal" data-k="${key}" aria-pressed="${S.kengetal === key}">${x.label}</button>`).join('')}</div>
+    <h2>${k.titel}</h2>
+    <p class="small muted">${k.hoogGoed ? 'Hoogste bovenaan.' : 'Laagste bovenaan.'}${S.kengetal === 'extra' ? ' Negatief betekent: het huidige rantsoen is goedkoper, maar dekt de normen niet.' : ''}</p>
+    <div class="staven">${gesorteerd.map(r => {
+      const v = r[S.kengetal];
+      const breedte = Math.abs(v) / maxAbs * (heeftNeg ? 50 : 100);
+      const links = heeftNeg ? (v < 0 ? 50 - breedte : 50) : 0;
+      const actief = r.b.id === S.bedrijfId;
+      return `<button class="staaf-rij${actief ? ' actief' : ''}" data-act="open-bedrijf" data-id="${esc(r.b.id)}" title="${esc(r.b.naam)}: ${esc(k.fmt(v))}">
+        <span class="staaf-naam">${logoHtml(r.b, 'logo mini')}<span>${esc(r.b.naam || 'Naamloos')}</span></span>
+        <span class="staaf-baan"><span class="staaf${v < 0 ? ' neg' : ''}" style="left:${links}%;width:${Math.max(0.8, breedte)}%"></span>${heeftNeg ? '<span class="nullijn"></span>' : ''}</span>
+        <span class="staaf-waarde">${k.fmt(v)}</span>
+      </button>`;
+    }).join('') || '<p class="muted">Nog geen bedrijven met voeders.</p>'}</div>
+  </section>`;
+  out += `<section class="panel">
+    <h2>Alle kengetallen</h2>
+    <div class="tabel-wrap"><table class="rt vergelijk">
+      <thead><tr><th>Bedrijf</th><th>Koeien</th><th>Melk</th><th>Vet</th><th>Eiwit</th><th>Voerkosten /100 kg</th><th>Voersaldo /koe/dag</th><th>Voersaldo koppel /maand</th><th>Kans advies /maand</th><th>Normen huidig</th></tr></thead>
+      <tbody>${rijen.map(r => `<tr${r.b.id === S.bedrijfId ? ' class="actief"' : ''}>
+        <td class="naam">${esc(r.b.naam || 'Naamloos')}</td>
+        <td class="n">${n(r.koeien)}</td><td class="n">${n(r.melk, 1)} kg</td><td class="n">${n(num(r.i.vet, 0), 2)}%</td><td class="n">${n(num(r.i.eiwit, 0), 2)}%</td>
+        <td class="n">${r.voeders ? eur(r.per100) : '–'}</td><td class="n">${r.voeders ? eur(r.saldo) : '–'}</td><td class="n">${r.voeders ? eur(r.saldoMaand, 0) : '–'}</td>
+        <td class="n">${r.extra !== null ? eurPlus(r.extra) : '–'}</td>
+        <td>${!r.voeders ? '<span class="muted">geen voeders</span>' : r.tekort.length ? `<span class="pil kritiek">${r.tekort.map(p => ({ vem: 'VEM', dve: 'DVE', oebMin: 'OEB', dsMax: 'DS', sw: 'structuur' }[p.key] || p.key)).join(', ')} tekort</span>` : '<span class="pil ok">gedekt</span>'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <p class="small muted">Tik op een bedrijf in de grafiek om het rantsoen ervan te openen.</p>
+  </section>`;
+  return out;
+}
+
+// ---------- Prijzen ----------
+function viewPrijzen() {
+  const P = prijzen(), w = P.wur, m = P.melk, i = ins();
+  const eigen = melkprijsPerKg(i, m) * 100;
+  const mv = w.mengvoer || {};
+  const hist = (w.historie || []).slice(-12);
+  return `<h1>Prijzen</h1>
+  <section class="panel">
+    <div class="sectie-kop"><h2>Voederwaardeprijzen rundvee</h2><span class="small muted">${datumNL(w.datum)}</span></div>
+    <div class="prijskop">
+      <div><span class="label">Energie</span><span class="groot">${n(w.kvem, 1)} ct</span><span class="small muted">per 1000 VEM2022</span></div>
+      <div><span class="label">Eiwittoeslag</span><span class="groot">${n(w.dveToeslag, 1)} ct</span><span class="small muted">per kg DVE</span></div>
+    </div>
+    ${hist.length > 2 ? `<div class="sparks">${spark(hist.map(h => ({ d: h.datum, v: h.kvem })), 'Energie, ct per kVEM', 1)}${spark(hist.map(h => ({ d: h.datum, v: h.dve })), 'Eiwittoeslag, ct per kg DVE', 1)}</div>` : ''}
+    <h3>Mengvoer melkvee</h3>
+    <div class="tabel-wrap"><table class="rt"><thead><tr><th>Brok (960 VEM2022 per kg)</th><th>€ per 100 kg</th></tr></thead><tbody>
+      ${['90', '105', '120', '150', '180'].filter(k => mv[k]).map(k => `<tr><td>${k} g DVE per kg</td><td class="n">${eur(mv[k])}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="bron">Bron: <a href="${esc(w.bron || BRON_WUR)}" target="_blank" rel="noopener">Wageningen Livestock Research</a>. Elke vier weken; volgende uiterlijk ${datumNL(w.volgende)}. Franco boerderij, excl. btw.</p>
+  </section>
+  <section class="panel">
+    <div class="sectie-kop"><h2>Melkprijs FrieslandCampina</h2><span class="small muted">${maandNL(m.maand)}</span></div>
+    <div class="prijskop">
+      <div><span class="label">Garantieprijs</span><span class="groot">${eur(m.garantieprijs)}</span><span class="small muted">per 100 kg bij ${n(m.stdEiwit, 2)}% eiwit, ${n(m.stdVet, 2)}% vet</span></div>
+      <div><span class="label">Jullie melk</span><span class="groot">${eur(eigen)}</span><span class="small muted">bij ${n(num(i.eiwit, 0), 2)}% eiwit, ${n(num(i.vet, 0), 2)}% vet</span></div>
+    </div>
+    <dl class="kv">
+      <dt>Eiwitwaarde</dt><dd>${eur(m.eiwitwaarde)} <span class="muted small">/100 kg eiwit</span></dd>
+      <dt>Vetwaarde</dt><dd>${eur(m.vetwaarde)} <span class="muted small">/100 kg vet</span></dd>
+      ${m.integraal ? `<dt>Integrale melkprijs (max. toeslagen)</dt><dd>${eur(m.integraal)}</dd>` : ''}
+      ${(m.historie || []).map(h => `<dt class="muted">Garantieprijs ${maandNL(h.maand)}</dt><dd class="muted">${eur(h.garantieprijs)}</dd>`).join('')}
+    </dl>
+    <p class="bron">Bron: <a href="${esc(m.bron || BRON_FC)}" target="_blank" rel="noopener">FrieslandCampina garantieprijs</a>. Excl. btw.</p>
+  </section>
+  ${STANDALONE ? `<section class="panel">
+    <h3>Prijzen bijwerken</h3>
+    <p class="small muted">${P.reserve ? 'Dit zijn de prijzen die in de app zijn meegeleverd.' : `Laatst bijgewerkt ${P.bijgewerkt ? datumNL(P.bijgewerkt) : ''}.`} Met internet haalt de app bij het openen zelf de nieuwste prijzen op van jullie website. Lukt dat niet, dan vul je ze hier zelf in.</p>
+    <div class="knoppen"><button class="btn" data-act="prijzen-ophalen">Nu ophalen</button><button class="btn" data-act="prijzen-form">Zelf invullen</button></div>
+  </section>` : `<p class="small muted">${P.reserve ? 'Laatst bekende prijzen in de app.' : `Bijgewerkt ${P.bijgewerkt ? datumNL(P.bijgewerkt) : ''}.`} De prijzen worden automatisch opgehaald op de 1e en 15e van de maand. WUR publiceert elke vier weken, FrieslandCampina maakt de melkprijs rond het einde van de maand bekend.</p>`}`;
+}
+function spark(data, titel, d) {
+  const W = 160, H = 64, L = 4, R = 30, T = 8, B = 16;
+  const vs = data.map(p => p.v); const mn = Math.min(...vs), mx = Math.max(...vs);
+  const X = k => L + k / (data.length - 1) * (W - L - R);
+  const Y = v => T + (1 - (v - mn) / ((mx - mn) || 1)) * (H - T - B);
+  const pad = data.map((p, k) => `${k ? 'L' : 'M'}${X(k).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
+  const last = data[data.length - 1];
+  const punten = data.map((p, k) => `<circle cx="${X(k)}" cy="${Y(p.v)}" r="7" fill="transparent"><title>${datumNL(p.d)}: ${n(p.v, d)}</title></circle>`).join('');
+  return `<figure class="spark" style="margin:0"><figcaption class="small muted">${titel}</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="${titel}: van ${n(data[0].v, d)} naar ${n(last.v, d)}">
+      <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--line)"/>
+      <path d="${pad}" fill="none" stroke="var(--mais-strong)" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${X(data.length - 1)}" cy="${Y(last.v)}" r="3.5" fill="var(--mais-strong)"/>
+      <text x="${W - R + 4}" y="${Y(last.v) + 4}" style="fill:var(--ink);font-weight:600">${n(last.v, d)}</text>
+      <text x="${L}" y="${H - 3}">${datumNL(data[0].d, true)}</text><text x="${W - R}" y="${H - 3}" text-anchor="end">${datumNL(last.d, true)}</text>
+      ${punten}
+    </svg></figure>`;
+}
+
+// ===================== Onderbladen =====================
+let blad = null;
+function openBlad(html, na) {
+  $('#blad-houder').innerHTML = `<div class="blad-achter" data-act="sluit"></div><div class="blad" role="dialog" aria-modal="true"><div class="blad-binnen"><div class="blad-greep"></div>${html}</div></div>`;
+  blad = $('#blad-houder .blad');
+  document.body.style.overflow = 'hidden';
+  if (na) na(blad);
+  const eerste = blad.querySelector('input, select, button.sjabloon'); if (eerste && window.matchMedia('(pointer:fine)').matches) eerste.focus();
+}
+function sluitBlad() { $('#blad-houder').innerHTML = ''; blad = null; document.body.style.overflow = ''; }
+
+function bladKop(titel) { return `<div class="blad-kop"><h2>${titel}</h2><button class="sluit" data-act="sluit" aria-label="Sluiten">×</button></div>`; }
+
+function openKiesBedrijf() {
+  const lijst = bedrijvenGesorteerd().map(b => {
+    const i = Object.assign({}, STANDAARD_INS, b.ins || {});
+    const nv = S.alleVoeders.filter(v => v.bedrijf === b.id).length;
+    return `<button class="bedrijf-optie${b.id === S.bedrijfId ? ' actief' : ''}" data-act="selecteer-bedrijf" data-id="${esc(b.id)}">${logoHtml(b)}<span><b>${esc(b.naam || 'Naamloos')}</b><span class="small muted">${n(num(i.koeien, 0))} koeien · ${n(num(i.melk, 0), 1)} kg melk · ${nv} voeders</span></span>${b.id === S.bedrijfId ? '<span class="chip">open</span>' : ''}</button>`;
+  }).join('');
+  openBlad(`${bladKop('Bedrijven')}<div class="bedrijf-lijst">${lijst}</div>
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn prim" data-act="nieuw-bedrijf">Nieuw bedrijf toevoegen</button></div>' : ''}`);
+}
+
+function openNieuwBedrijf() {
+  const bron = huidigBedrijf();
+  openBlad(`${bladKop('Nieuw bedrijf')}
+    <form class="form" id="bedrijfform" novalidate>
+      <div class="veld" data-veld="naam"><label for="b-naam">Bedrijfsnaam</label><input id="b-naam" name="naam" autocomplete="off" placeholder="bijv. Melkveebedrijf De Hoeve"></div>
+      <fieldset><legend>Beginnen met</legend>
+        <label class="vink"><input type="radio" name="begin" value="standaard" checked> Standaard voeders (graskuil, maïskuil, stro, tarwegist, 2 mineralen)</label>
+        ${bron ? `<label class="vink"><input type="radio" name="begin" value="kopie"> Een kopie van de voeders en het koppel van ${esc(bron.naam || 'het huidige bedrijf')}</label>` : ''}
+        <label class="vink"><input type="radio" name="begin" value="leeg"> Leeg, ik voer alles zelf in</label>
+      </fieldset>
+      <p class="small muted">Het logo voeg je daarna toe onder Bedrijf.</p>
+      <div class="blad-voet"><button type="submit" class="btn prim">Bedrijf aanmaken</button><button type="button" class="btn" data-act="sluit">Annuleren</button></div>
+    </form>`, b => {
+    const f = b.querySelector('#bedrijfform');
+    f.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const naam = f.elements.naam.value.trim();
+      const veld = f.querySelector('[data-veld="naam"]');
+      veld.classList.remove('fout'); const oud = veld.querySelector('.fouttekst'); if (oud) oud.remove();
+      if (!naam) { veld.classList.add('fout'); veld.insertAdjacentHTML('beforeend', '<span class="fouttekst">Geef het bedrijf een naam.</span>'); f.elements.naam.focus(); return; }
+      const begin = (f.querySelector('input[name="begin"]:checked') || {}).value || 'standaard';
+      sluitBlad();
+      maakBedrijf(naam, begin);
+    });
+  });
+}
+
+function openNieuw() {
+  const knoppen = SJABLONEN.map(t => `<button class="sjabloon" data-act="sjabloon" data-key="${t.key}"><b>${t.key === 'leeg' ? 'Zelf invullen' : esc(t.naam)}</b><span>${esc(t.uitleg)}</span></button>`).join('');
+  openBlad(`${bladKop('Voer of kuil toevoegen')}<p class="small muted">Kies een begin. De voederwaarden zijn gemiddelden; vervang ze door de kuilanalyse of het productblad van de leverancier.</p><div class="sjablonen">${knoppen}</div>`);
+}
+
+function openVoer(v, isNieuw) {
+  const d = Object.assign({}, v);
+  const mineraal = d.soort === 'mineraal';
+  const veld = (id, label, waarde, hint, cls = '') => `<div class="veld ${cls}" data-veld="${id}"><label for="f-${id}">${label}</label><input id="f-${id}" name="${id}" inputmode="decimal" autocomplete="off" value="${esc(invoer(waarde))}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const soortSel = `<div class="veld"><label for="f-soort">Soort</label><select id="f-soort" name="soort">${Object.entries(SOORTEN).map(([k, l]) => `<option value="${k}"${d.soort === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>`;
+  let html = bladKop(isNieuw ? 'Nieuw voer' : esc(d.naam || 'Voer'));
+  html += `<form class="form" id="voerform" novalidate>
+    <div class="velden"><div class="veld vol" data-veld="naam"><label for="f-naam">Naam</label><input id="f-naam" name="naam" value="${esc(d.naam || '')}" autocomplete="off" placeholder="bijv. Graskuil 1e snede 2026"></div>${soortSel}</div>`;
+  if (mineraal) {
+    html += `<div class="velden">${veld('huidig', 'Gift per koe per dag', d.huidig, 'gram')}${veld('prijs', 'Prijs', d.prijs, '€ per kg')}</div>`;
+  } else {
+    html += `<fieldset><legend>Analyse per kg droge stof</legend>
+      <div class="velden drie">
+        ${veld('ds', 'Droge stof', d.ds, '% van product')}
+        ${veld('vem', 'VEM2022', d.vem, 'per kg DS')}
+        ${veld('dve', 'DVE', d.dve, 'g per kg DS')}
+        ${veld('oeb', 'OEB', d.oeb, 'g per kg DS')}
+        ${veld('sw', 'Structuur (SW)', d.sw, 'per kg DS')}
+        <div class="veld vol"><label for="f-analyse">Analysedatum</label><input id="f-analyse" name="analyse" type="date" value="${esc(d.analyse || '')}"></div>
+      </div>
+      <p class="small muted">Staan de waarden per kg product op het verslag? Deel ze door het drogestofpercentage (bijv. 425 VEM per kg bij 45% DS = 944 per kg DS).</p>
+    </fieldset>
+    <fieldset><legend>Prijs</legend>
+      <div class="veld" data-veld="prijs"><label for="f-prijs">Prijs</label><div class="eenheid"><input id="f-prijs" name="prijs" inputmode="decimal" autocomplete="off" value="${esc(invoer(d.prijs))}" placeholder="0,00"><select id="f-eenheid" name="eenheid" aria-label="Eenheid">${Object.entries(EENHEDEN).map(([k, l]) => `<option value="${k}"${d.eenheid === k ? ' selected' : ''}>${l.replace('€ ', '')}</option>`).join('')}</select></div><span class="hint" id="vwp-hint"></span></div>
+    </fieldset>
+    <fieldset><legend>Gebruik in het advies</legend>
+      <label class="vink"><input type="checkbox" id="f-actief" name="actief"${d.actief !== false ? ' checked' : ''}> Mag gebruikt worden in het advies</label>
+      <div class="velden drie">
+        ${veld('min', 'Minimaal', d.min, 'kg product/koe')}
+        ${veld('max', 'Maximaal', d.max, 'kg product/koe')}
+        ${veld('voorraad', 'Voorraad', d.voorraad, 'ton product')}
+      </div>
+      <p class="small muted">Zet minimaal en maximaal gelijk om een vaste hoeveelheid te voeren, bijvoorbeeld bij een contract.</p>
+    </fieldset>`;
+  }
+  html += `<div class="veld"><label for="f-notitie">Notitie</label><textarea id="f-notitie" name="notitie">${esc(d.notitie || '')}</textarea></div>
+    <div id="verwijder-plek"></div>
+    <div class="blad-voet"><button type="submit" class="btn prim">Opslaan</button><button type="button" class="btn" data-act="sluit">Annuleren</button>${isNieuw ? '' : '<button type="button" class="btn gevaar" data-act="verwijder-vraag">Verwijderen</button>'}</div>
+  </form>`;
+  openBlad(html, b => {
+    const f = b.querySelector('#voerform');
+    f._voer = d; f._nieuw = isNieuw;
+    const hint = () => {
+      const h = b.querySelector('#vwp-hint'); if (!h) return;
+      const t = { ds: num(f.elements.ds.value, 0), vem: num(f.elements.vem.value, 0), dve: num(f.elements.dve.value, 0), prijs: num(f.elements.prijs.value, 0), eenheid: f.elements.eenheid.value };
+      const vwp = voederwaardePrijs(t, prijzen().wur);
+      if (!(vwp > 0)) { h.textContent = ''; return; }
+      const ptp = prijsPerTonProduct(t);
+      h.textContent = `WUR-voederwaarde bij deze analyse: ${eur(vwp, 0)} per ton product${ptp > 0 ? ` · jullie prijs is ${n(ptp / vwp * 100)}% daarvan` : ''}.`;
+    };
+    hint();
+    f.addEventListener('input', hint);
+    f.elements.soort.addEventListener('change', () => {
+      const nu = leesVoerForm(f, true);
+      nu.soort = f.elements.soort.value;
+      if (nu.soort === 'mineraal' && !nu.eenheid) nu.eenheid = 'kg';
+      if (nu.soort === 'mineraal') nu.eenheid = 'kg';
+      openVoer(nu, isNieuw);
+    });
+    f.addEventListener('submit', ev => { ev.preventDefault(); slaVoerOp(f); });
+  });
+}
+function leesVoerForm(f, ruw) {
+  const d = Object.assign({}, f._voer);
+  const el = f.elements;
+  d.naam = el.naam.value.trim();
+  d.soort = el.soort.value;
+  const getal = k => { if (!el[k]) return; const r = el[k].value.trim(); d[k] = r === '' ? '' : (Number.isFinite(num(r, NaN)) ? num(r, NaN) : (ruw ? r : NaN)); };
+  if (d.soort === 'mineraal' && el.huidig) { getal('huidig'); getal('prijs'); d.eenheid = 'kg'; }
+  else if (el.ds) {
+    ['ds', 'vem', 'dve', 'oeb', 'sw', 'prijs', 'min', 'max', 'voorraad'].forEach(getal);
+    d.eenheid = el.eenheid.value;
+    d.actief = el.actief.checked;
+    d.analyse = el.analyse.value || '';
+  }
+  d.notitie = el.notitie.value.trim();
+  return d;
+}
+function slaVoerOp(f) {
+  const d = leesVoerForm(f, false);
+  f.querySelectorAll('.veld.fout').forEach(x => { x.classList.remove('fout'); const t = x.querySelector('.fouttekst'); if (t) t.remove(); });
+  const fouten = [];
+  const fout = (k, t) => { fouten.push(k); const v = f.querySelector(`[data-veld="${k}"]`); if (v) { v.classList.add('fout'); v.insertAdjacentHTML('beforeend', `<span class="fouttekst">${t}</span>`); } };
+  if (!d.naam) fout('naam', 'Geef het voer een naam.');
+  if (d.soort === 'mineraal') {
+    if (!Number.isFinite(d.huidig) || d.huidig < 0) fout('huidig', 'Vul de gift in grammen in.');
+    if (!Number.isFinite(d.prijs) || d.prijs < 0) fout('prijs', 'Vul de prijs per kg in.');
+  } else {
+    if (!Number.isFinite(d.ds) || d.ds <= 0 || d.ds > 100) fout('ds', 'Tussen 1 en 100%.');
+    if (!Number.isFinite(d.vem) || d.vem < 0 || d.vem > 1600) fout('vem', 'Vul de VEM per kg DS in.');
+    if (!Number.isFinite(d.dve)) fout('dve', 'Vul de DVE in.');
+    if (!Number.isFinite(d.oeb)) fout('oeb', 'Vul de OEB in.');
+    if (d.sw === '') d.sw = 0;
+    if (!Number.isFinite(d.sw)) fout('sw', 'Vul een getal in.');
+    if (!Number.isFinite(d.prijs) || d.prijs < 0) fout('prijs', 'Vul de prijs in; zonder prijs kan de app niet vergelijken.');
+    ['min', 'max', 'voorraad'].forEach(k => { if (d[k] !== '' && !Number.isFinite(d[k])) fout(k, 'Vul een getal in of laat leeg.'); });
+    if (Number.isFinite(d.min) && Number.isFinite(d.max) && d.max < d.min) fout('max', 'Lager dan het minimum.');
+    const oud = f._voer;
+    if (['ds', 'vem', 'dve', 'oeb', 'sw'].some(k => num(oud[k], null) !== num(d[k], null)) || d.analyse) d.bron = 'eigen';
+    if (d.huidig === undefined) d.huidig = 0;
+  }
+  if (fouten.length) { const eerste = f.querySelector('.veld.fout input'); if (eerste) eerste.focus(); return; }
+  if (f._nieuw) { d.id = nieuwId(d.naam); d.volgorde = S.voeders.reduce((m, v) => Math.max(m, num(v.volgorde, 0)), 0) + 1; }
+  bewaarVoer(d).then(() => toast('Opgeslagen')).catch(() => {});
+  sluitBlad();
+  render();
+}
+
+function openHuidig() {
+  const vs = gesorteerd();
+  const rij = v => v.soort === 'mineraal'
+    ? `<div class="veld"><label for="h-${esc(v.id)}">${esc(v.naam)}</label><input id="h-${esc(v.id)}" data-id="${esc(v.id)}" inputmode="decimal" value="${esc(invoer(v.huidig))}"><span class="hint">gram per koe per dag</span></div>`
+    : `<div class="veld"><label for="h-${esc(v.id)}">${esc(v.naam)}</label><input id="h-${esc(v.id)}" data-id="${esc(v.id)}" inputmode="decimal" value="${esc(invoer(v.huidig))}"><span class="hint">kg product per koe per dag</span></div>`;
+  openBlad(`${bladKop('Huidig rantsoen')}<p class="small muted">Wat krijgt een gemiddelde melkkoe nu per dag, inclusief krachtvoer uit de krachtvoerbox?</p>
+    <form class="form" id="huidigform"><div class="velden">${vs.map(rij).join('')}</div>
+    <div class="livetotaal" id="livetotaal"></div>
+    <div class="blad-voet"><button type="submit" class="btn prim">Opslaan</button><button type="button" class="btn" data-act="sluit">Annuleren</button></div></form>`, b => {
+    const f = b.querySelector('#huidigform');
+    const lees = () => {
+      const kopie = S.voeders.map(v => { const el = f.querySelector(`input[data-id="${CSS.escape(v.id)}"]`); return Object.assign({}, v, el ? { huidig: num(el.value, 0) } : {}); });
+      return kopie;
+    };
+    const live = () => {
+      const R = huidigRantsoen(lees(), ins());
+      b.querySelector('#livetotaal').innerHTML = `<div>Droge stof<b>${n(R.T.ds, 1)} kg</b></div><div>Energie<b>${n(R.T.vem / R.B.vem * 100)}%</b></div><div>Eiwit (DVE)<b>${n(R.T.dve / R.B.dve * 100)}%</b></div>`;
+    };
+    live(); f.addEventListener('input', live);
+    f.addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const nieuw = lees();
+      const gewijzigd = nieuw.filter(v => num(v.huidig, 0) !== num((S.voeders.find(x => x.id === v.id) || {}).huidig, 0));
+      sluitBlad();
+      for (const v of gewijzigd) { try { await bewaarVoer(v); } catch (e) { break; } }
+      if (gewijzigd.length) { toast('Huidig rantsoen opgeslagen'); }
+      render();
+    });
+  });
+}
+
+async function adviesOvernemen() {
+  const { O } = berekenAlles();
+  if (!O) return;
+  S.bevestig = null;
+  const wijzig = [];
+  S.voeders.forEach(v => {
+    if (v.soort === 'mineraal') return;
+    const kg = v.actief === false ? 0 : Math.round(kgProduct(v, O.kgDs[v.id] || 0) * 10) / 10;
+    if (kg !== num(v.huidig, 0)) wijzig.push(Object.assign({}, v, { huidig: kg }));
+  });
+  for (const v of wijzig) { try { await bewaarVoer(v); } catch (e) { break; } }
+  toast('Advies is nu het huidige rantsoen');
+  render();
+}
+
+// ===================== Bediening =====================
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-act], .tab');
+  if (!t) return;
+  if (t.classList.contains('tab')) { kiesTab(t.dataset.tab); return; }
+  const act = t.dataset.act;
+  if (act === 'tab') kiesTab(t.dataset.tab);
+  else if (act === 'naar-koppel') kiesTab('bedrijf');
+  else if (act === 'weergave') { S.weergave = t.dataset.w; render(); }
+  else if (act === 'huidig') openHuidig();
+  else if (act === 'advies-vraag') { S.bevestig = 'advies'; render(); }
+  else if (act === 'advies-nee') { S.bevestig = null; render(); }
+  else if (act === 'advies-ja') adviesOvernemen();
+  else if (act === 'nieuw') openNieuw();
+  else if (act === 'sjabloon') { const v = uitSjabloon(t.dataset.key, 0); openVoer(v, true); }
+  else if (act === 'bewerk') { const v = S.voeders.find(x => x.id === t.dataset.id); if (v) openVoer(v, false); }
+  else if (act === 'sluit') sluitBlad();
+  else if (act === 'verwijder-vraag') {
+    const plek = $('#verwijder-plek');
+    plek.innerHTML = `<div class="melding kritiek"><span class="stip"></span><div>Dit voer en de analyse worden verwijderd.<div class="knoppen"><button type="button" class="btn klein gevaar" data-act="verwijder-ja">Ja, verwijder</button><button type="button" class="btn klein" data-act="verwijder-nee">Nee</button></div></div></div>`;
+  }
+  else if (act === 'verwijder-nee') { $('#verwijder-plek').innerHTML = ''; }
+  else if (act === 'verwijder-ja') {
+    const f = $('#voerform'); const id = f && f._voer && f._voer.id;
+    if (id) { S.alleVoeders = S.alleVoeders.filter(v => v.id !== id); afleiden(); verwijder('voeders/' + id).then(() => toast('Verwijderd')).catch(() => {}); }
+    sluitBlad(); render();
+  }
+  else if (act === 'voorbeeld-weg') { S.ins = Object.assign({}, ins(), { voorbeeld: false }); bewaarIns(true); render(); }
+  else if (act === 'startset') {
+    const b = huidigBedrijf(); if (!b) return;
+    const vs = startsetMaken(b.id);
+    S.alleVoeders.push(...vs); afleiden(); render();
+    (async () => { for (const v of vs) { try { await schrijf('voeders/' + v.id, voerData(v)); } catch (e) { break; } } })();
+  }
+  else if (act === 'kies-bedrijf') openKiesBedrijf();
+  else if (act === 'selecteer-bedrijf') { sluitBlad(); kiesBedrijf(t.dataset.id); }
+  else if (act === 'nieuw-bedrijf') openNieuwBedrijf();
+  else if (act === 'open-bedrijf') { kiesBedrijf(t.dataset.id); kiesTab('rantsoen'); }
+  else if (act === 'kengetal') { S.kengetal = t.dataset.k; render(); }
+  else if (act === 'logo-weg') logoWeg();
+  else if (act === 'bedrijf-weg-vraag') { S.bevestig = 'bedrijf-weg'; render(); }
+  else if (act === 'bedrijf-weg-nee') { S.bevestig = null; render(); }
+  else if (act === 'bedrijf-weg-ja') { S.bevestig = null; verwijderBedrijf(S.bedrijfId); }
+  else if (act === 'prijzen-ophalen') prijzenOphalen(true);
+  else if (act === 'prijzen-form') openPrijzenForm();
+  else if (act === 'backup-maken') backupMaken();
+  else if (act === 'import-ja') backupTerugzetten();
+  else if (act === 'import-nee') { backupWacht = null; S.bevestig = null; render(); }
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && blad) sluitBlad(); });
+document.addEventListener('input', ev => { if (ev.target.id !== 'logo-input' && ev.target.closest && ev.target.closest('#koppelform')) leesKoppelForm(); });
+document.addEventListener('change', ev => {
+  if (ev.target.id === 'logo-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; logoKiezen(file); return; }
+  if (ev.target.id === 'backup-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; backupLezen(file); return; }
+  if (ev.target.closest && ev.target.closest('#koppelform')) leesKoppelForm();
+});
+// Logo dat niet laadt: toon de initialen
+document.addEventListener('error', ev => {
+  const img = ev.target;
+  if (img && img.tagName === 'IMG' && img.dataset && img.dataset.mono !== undefined) {
+    const s = document.createElement('span');
+    s.className = img.className + ' monogram'; s.textContent = img.dataset.mono; s.setAttribute('aria-hidden', 'true');
+    img.replaceWith(s);
+  }
+}, true);
+function kiesTab(tab) {
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#koppelform')) document.activeElement.blur();
+  if (S.tab === 'bedrijf' && insTimer) bewaarIns(true);
+  S.tab = tab; S.bevestig = null;
+  try { localStorage.setItem('rv-tab', tab); } catch (e) { /* geen opslag */ }
+  render();
+  window.scrollTo(0, 0);
+}
+
+start();
+
+</script>
+
+</body>
+</html>

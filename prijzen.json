@@ -1,0 +1,39 @@
+{
+ "wur": {
+  "datum": "2026-10-13",
+  "kvem": 25.3,
+  "dveToeslag": 104.2,
+  "volgende": "2026-11-10",
+  "mengvoer": {"90": 34.2, "105": 35.73, "120": 36.99, "150": 40.14, "180": 43.65},
+  "historie": [
+   {"datum": "2025-12-09", "kvem": 21.2, "dve": 72.4},
+   {"datum": "2026-01-13", "kvem": 20.9, "dve": 74.4},
+   {"datum": "2026-02-10", "kvem": 21.0, "dve": 76.1},
+   {"datum": "2026-03-10", "kvem": 20.8, "dve": 82.9},
+   {"datum": "2026-04-14", "kvem": 20.9, "dve": 89.8},
+   {"datum": "2026-05-12", "kvem": 20.6, "dve": 92.2},
+   {"datum": "2026-06-09", "kvem": 20.8, "dve": 89.9},
+   {"datum": "2026-07-14", "kvem": 20.9, "dve": 87.7},
+   {"datum": "2026-08-11", "kvem": 24.2, "dve": 83.2},
+   {"datum": "2026-09-08", "kvem": 24.1, "dve": 94.2},
+   {"datum": "2026-10-13", "kvem": 25.3, "dve": 104.2}
+  ],
+  "bron": "https://www.wur.nl/nl/onderzoek/producten-diensten/voederwaardeprijzen-rundvee"
+ },
+ "melk": {
+  "maand": "2026-11",
+  "garantieprijs": 47.0,
+  "eiwitwaarde": 656.24,
+  "vetwaarde": 524.99,
+  "stdEiwit": 3.57,
+  "stdVet": 4.49,
+  "integraal": 50.71,
+  "historie": [
+   {"maand": "2026-09", "garantieprijs": 44.0},
+   {"maand": "2026-10", "garantieprijs": 45.5},
+   {"maand": "2026-11", "garantieprijs": 47.0}
+  ],
+  "bron": "https://www.frieslandcampina.com/nl/eigendom-van-boeren/garantieprijs/"
+ },
+ "bijgewerkt": "2026-10-30T19:30:00+01:00"
+}
