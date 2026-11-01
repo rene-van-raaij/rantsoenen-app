@@ -1,5 +1,6 @@
-"""Haalt de nieuwste voederwaardeprijzen (WUR), de FrieslandCampina-garantieprijs en de
-notering van fosfaatrechten (fosfaatrecht.nu) op en werkt prijzen.json bij. Draait in GitHub Actions (zie .github/workflows/publiceren.yml).
+"""Haalt de nieuwste voederwaardeprijzen (WUR), de FrieslandCampina-garantieprijs, de
+notering van fosfaatrechten (fosfaatrecht.nu) en het productoverzicht van Van Vulpen
+(veevoer.nu, voederwaarden zonder prijzen) op en werkt prijzen.json bij. Draait in GitHub Actions (zie .github/workflows/publiceren.yml).
 
 Gebruik: python scripts/prijzen_bijwerken.py prijzen.json
 Exitcode 0 = gelukt (ook als er niets nieuws was), 1 = een bron kon niet gelezen worden.
@@ -8,6 +9,7 @@ import datetime as dt
 import html as htmlmod
 import io
 import json
+import os
 import re
 import sys
 from zoneinfo import ZoneInfo
@@ -162,10 +164,121 @@ def fosfaat_uit_tekst(tekst):
     return uit
 
 
+# ---------- Productoverzicht Van Vulpen (veevoer.nu) ----------
+VEEVOER_SITEMAP = "https://veevoer.nu/sitemap_index.xml"
+VEEVOER_VELDEN = [  # (sleutel, label op de pagina)
+    ("vem", r"VEM"), ("vevi", r"VEVI"), ("dve", r"DVE"), ("oeb", r"OEB"),
+    ("re", r"Ruw eiwit"), ("rc", r"Ruwe celstof"), ("zetmeel", r"Zetmeel"), ("suiker", r"Suiker"), ("p", r"Fosfor"),
+]
+
+
+def _getal_of_none(s):
+    try:
+        return float(s.replace("\u2212", "-").replace(",", "."))
+    except (ValueError, AttributeError):
+        return None
+
+
+def veevoer_product_uit_html(html, url):
+    """Lees naam, diersoorten en de specificatietabel van een productpagina (waarden per kg droge stof)."""
+    naam = None
+    m = re.search(r"(?is)<h1[^>]*>(.*?)</h1>", html)
+    if m:
+        naam = re.sub(r"\s+", " ", htmlmod.unescape(re.sub(r"<[^>]+>", " ", m.group(1)))).strip().replace("–", "-")
+    t = re.sub(r"\s+", " ", html_naar_tekst(html))
+    i = t.lower().find("droge stof")
+    deel = t[i:] if i >= 0 else t
+    p = {"naam": naam or url.rstrip("/").split("/")[-1].replace("-", " ").capitalize(), "url": url}
+    ds = re.search(r"Droge stof\s*:?\s*(?:ca\.?\s*)?(\d{1,3}(?:[.,]\d+)?)\s*(?:-\s*(\d{1,3}(?:[.,]\d+)?))?\s*%?", deel, flags=re.I)
+    p["ds"] = None
+    if ds:
+        a = _getal_of_none(ds.group(1))
+        b = _getal_of_none(ds.group(2)) if ds.group(2) else None
+        if a is not None and b is not None:
+            p["ds"], p["dsBereik"] = round((a + b) / 2, 1), f"{ds.group(1)}-{ds.group(2)}%"
+        else:
+            p["ds"] = a
+    for sleutel, label in VEEVOER_VELDEN:
+        # alleen een los getal telt; een bereik ('880-940') of '<10' wordt overgeslagen
+        m = re.search(r"(?<![A-Za-z])" + label + r"\s*:?\s*([-−]?\d+(?:[.,]\d+)?)(?![\d%]|\s*-\s*\d)", deel)
+        p[sleutel] = _getal_of_none(m.group(1)) if m else None
+    # diersoorten alleen uit het voeradvies, niet uit menu's
+    j = t.lower().find("voeradvies")
+    advies = t[j:j + 1500] if j >= 0 else ""
+    dier = set(re.findall(r"\b(Melkvee|Rundvee|Vleesvee|Jongvee|Varkens|Schapen|Geiten)\b", advies, flags=re.I))
+    if re.search(r"melk- en vleesvee", advies, flags=re.I):
+        dier |= {"Melkvee", "Vleesvee"}
+    p["diersoorten"] = sorted({d.capitalize() for d in dier})
+    return p
+
+
+def veevoer_product_urls(get):
+    index = get(VEEVOER_SITEMAP)
+    kaarten = [u for u in re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", index) if "product" in u and u.endswith(".xml")]
+    urls = []
+    for kaart in kaarten or [VEEVOER_SITEMAP]:
+        xml = get(kaart) if kaart != VEEVOER_SITEMAP else index
+        urls += [u for u in re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", xml) if "/product/" in u]
+    return sorted(set(urls))
+
+
+def veevoer_categorieen(get):
+    """Categorie per product-URL uit de overzichtspagina's."""
+    uit = {}
+    for cat, pad in (("ruwvoer", "ruwvoeders"), ("krachtvoer", "krachtvoeders"), ("bijproduct", "bijproducten")):
+        try:
+            html = get(f"https://veevoer.nu/producten/{pad}/")
+        except Exception:  # noqa: BLE001
+            continue
+        for u in set(re.findall(r'href="(https://veevoer\.nu/product/[^"#?]+)"', html)):
+            uit.setdefault(u.rstrip("/") + "/", cat)
+    return uit
+
+
+def eerdere_producten(pad_json, oud):
+    """Eerder vastgestelde categorie, diersoorten en leverbaarheid per URL: uit prijzen.json, anders uit index.html."""
+    lijst = (oud.get("producten") or {}).get("producten") or []
+    if not lijst:
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(pad_json)), "index.html"), encoding="utf-8") as f:
+                m = re.search(r"const PRODUCTEN_RESERVE = (\{.*?\});\n", f.read(), flags=re.S)
+            lijst = json.loads(m.group(1))["producten"] if m else []
+        except Exception:  # noqa: BLE001
+            lijst = []
+    return {p.get("url"): p for p in lijst if p.get("url")}
+
+
+def veevoer_producten(get, eerder=None):
+    eerder = eerder or {}
+    cats = veevoer_categorieen(get)
+    producten = []
+    for url in veevoer_product_urls(get):
+        try:
+            p = veevoer_product_uit_html(get(url), url)
+        except Exception:  # noqa: BLE001
+            continue
+        oud = eerder.get(url) or {}
+        p["categorie"] = oud.get("categorie") or cats.get(url.rstrip("/") + "/")
+        if oud.get("diersoorten"):
+            p["diersoorten"] = oud["diersoorten"]
+        if oud.get("leverbaar") is False:
+            p["leverbaar"] = False
+        producten.append(p)
+    bruikbaar = [p for p in producten if all(isinstance(p.get(k), float) for k in ("ds", "vem", "dve", "oeb"))]
+    if len(bruikbaar) < 15:
+        raise ValueError(f"maar {len(bruikbaar)} producten met volledige voederwaarden gevonden")
+    vandaag = dt.datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+    return {"bron": "https://veevoer.nu/", "opgehaald": vandaag, "producten": sorted(producten, key=lambda p: p["naam"].lower())}
+
+
 # ---------- Samenvoegen ----------
-def samenvoegen(oud, wur=None, melk=None, fosfaat=None):
+def samenvoegen(oud, wur=None, melk=None, fosfaat=None, producten=None):
     nieuw = json.loads(json.dumps(oud))
     veranderd = False
+    oude_lijst = (oud.get("producten") or {}).get("producten")
+    if producten and (not oude_lijst or [{k: v for k, v in p.items()} for p in producten["producten"]] != oude_lijst):
+        nieuw["producten"] = producten
+        veranderd = True
     if fosfaat:
         vorige = oud.get("fosfaat") or {"datum": "", "historie": FOSFAAT_START}
         velden = ("koop100", "koop0", "lease")
@@ -235,7 +348,17 @@ def main(pad):
         print(f"Fosfaatrechten {fosfaat['datum']}: koop € {fosfaat['koop100']}, lease € {fosfaat.get('lease')}")
     except Exception as e:  # noqa: BLE001
         fouten.append(f"Fosfaatrechten: {e}")
-    nieuw, veranderd = samenvoegen(oud, wur, melk, fosfaat)
+    producten = None
+    try:
+        def get(url):
+            r = requests.get(url, headers=HEADERS, timeout=60)
+            r.raise_for_status()
+            return r.text
+        producten = veevoer_producten(get, eerdere_producten(pad, oud))
+        print(f"Productoverzicht Van Vulpen: {len(producten['producten'])} producten")
+    except Exception as e:  # noqa: BLE001
+        fouten.append(f"Productoverzicht: {e}")
+    nieuw, veranderd = samenvoegen(oud, wur, melk, fosfaat, producten)
     if veranderd:
         with open(pad, "w", encoding="utf-8") as f:
             json.dump(nieuw, f, ensure_ascii=False, indent=1)
