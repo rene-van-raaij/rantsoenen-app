@@ -243,7 +243,7 @@ table.rt .naam small { display: block; font-weight: 400; color: var(--ink-3); fo
 .dekt b { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* Lijst met label/waarde */
-dl.kv { display: grid; grid-template-columns: 1fr auto; margin: 0; }
+dl.kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; margin: 0; }
 dl.kv dt, dl.kv dd { padding: 8px 0; border-bottom: 1px solid var(--line); margin: 0; }
 dl.kv dd { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 dl.kv dt.tot, dl.kv dd.tot { border-bottom: 0; font-size: 17px; }
@@ -255,6 +255,11 @@ dl.kv dd.tot { font-family: var(--font-display); font-size: 22px; }
 .grafiek .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 13px; padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); font-variant-numeric: tabular-nums; }
 .grafiek text { font-family: var(--font-body); font-size: 11px; fill: var(--ink-3); }
 .grafiek text.ink { fill: var(--ink); font-weight: 600; }
+.legenda { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); }
+.legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.legenda .lijn { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
+.legenda .lijn.mais { background: var(--mais-strong); }
+.legenda .lijn.grijs { background: var(--ink-3); height: 2px; }
 details.tabelweergave summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
 details.tabelweergave table { margin-top: 8px; }
 
@@ -438,6 +443,121 @@ function behoefte(ins, melk, dichtheid) {
     oebMin: num(ins.oebMin, 0), oebMax: num(ins.oebMax, 300),
     swMin: num(ins.swMin, 1.0),
     vemMax: vem * (1 + num(ins.vemMarge, 5) / 100),
+    zsMax: num(ins.zsMax, Infinity) > 0 ? num(ins.zsMax, Infinity) : Infinity,
+    suikerMax: num(ins.suikerMax, Infinity) > 0 ? num(ins.suikerMax, Infinity) : Infinity,
+  };
+}
+
+// ---------- Zetmeel en suiker ----------
+// Standaardschattingen (g per kg DS) voor voeders zonder ingevulde waarde, herkend aan de naam.
+// Grove gemiddelden; een analyse of productblad is altijd beter.
+const ZS_SCHATTING = [
+  [/maiskuil|snijmais|kuilmais/, 360, 10, 'maïskuil'],
+  [/\bccm\b|maiskolf/, 600, 15, 'CCM'],
+  [/graskuil|kuilgras|voordroog|gras/, 0, 90, 'graskuil'],
+  [/stro/, 0, 10, 'stro'],
+  [/gerst/, 600, 25, 'gerst'],
+  [/tarwegist|\btgc\b|protigold|protistar/, 40, 40, 'tarwegistconcentraat'],
+  [/tarwe/, 680, 30, 'tarwe'],
+  [/triticale/, 650, 30, 'triticale'],
+  [/korrelmais|maismeel|maiskorrel/, 700, 15, 'maïskorrel'],
+  [/raap|koolzaad/, 15, 80, 'raapzaadschroot'],
+  [/soja/, 10, 85, 'sojaschroot'],
+  [/bostel|draf/, 40, 10, 'bierbostel'],
+  [/persvezel|aardappel/, 250, 10, 'aardappelpersvezels'],
+  [/pulp/, 0, 60, 'bietenperspulp'],
+  [/brok|mengvoer|krachtvoer/, 200, 70, 'brok'],
+];
+function normNaam(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function zsSchatting(naam) {
+  const s = normNaam(naam);
+  for (const [re, z, su, label] of ZS_SCHATTING) if (re.test(s)) return { zetmeel: z, suiker: su, label };
+  return null;
+}
+function ingevuld(x) { return x !== undefined && x !== null && x !== '' && Number.isFinite(num(x, NaN)); }
+function zsWaarden(v) {
+  const s = zsSchatting(v.naam);
+  const z = ingevuld(v.zetmeel) ? num(v.zetmeel, 0) : (s ? s.zetmeel : 0);
+  const su = ingevuld(v.suiker) ? num(v.suiker, 0) : (s ? s.suiker : 0);
+  const bron = (ingevuld(v.zetmeel) && ingevuld(v.suiker)) ? 'ingevuld' : s ? 'schatting' : 'onbekend';
+  return { zetmeel: z, suiker: su, zs: z + su, bron, label: s ? s.label : '' };
+}
+
+// ---------- Voorraadplanning en grenzen per voer ----------
+function dagenTot(datum, vandaag) {
+  const nu = vandaag ? new Date(vandaag + 'T12:00:00') : new Date();
+  const d = new Date(String(datum) + 'T12:00:00');
+  if (isNaN(d)) return null;
+  const n0 = Date.UTC(nu.getFullYear(), nu.getMonth(), nu.getDate());
+  return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - n0) / 86400000);
+}
+// Grenzen in kg product per koe per dag: zelf ingesteld min/max, aangevuld met de voorraadplanning.
+function voerGrenzen(v, ins) {
+  const minZelf = grens(v, 'min'), maxZelf = grens(v, 'max');
+  const r = { min: minZelf || 0, max: maxZelf === null ? Infinity : maxZelf, bronMin: minZelf ? 'zelf' : '', bronMax: maxZelf !== null ? 'zelf' : '', plan: null, conflict: false };
+  const type = v.planType;
+  const voorraad = num(v.voorraad, 0);
+  const koeien = num(ins && ins.koeien, 0);
+  if (type && voorraad > 0 && v.planDatum && koeien > 0) {
+    const dagen = dagenTot(v.planDatum, ins && ins.vandaag);
+    if (dagen !== null && dagen > 0) {
+      const perDag = voorraad * 1000 / (dagen * koeien);
+      r.plan = { dagen, perDag, type, datum: v.planDatum };
+      if ((type === 'mee' || type === 'precies') && perDag < r.max) { r.max = perDag; r.bronMax = 'voorraad'; }
+      if ((type === 'op' || type === 'precies') && perDag > r.min) { r.min = perDag; r.bronMin = 'voorraad'; }
+      if (r.min > r.max + 1e-9) {
+        r.conflict = true; // zelf ingestelde grens gaat voor
+        if (r.bronMin === 'voorraad') { r.min = r.max; } else { r.max = r.min; }
+      }
+    } else if (dagen !== null) {
+      r.plan = { dagen, perDag: null, type, datum: v.planDatum, verlopen: true };
+    }
+  }
+  return r;
+}
+
+// ---------- Fosfaatrechten (RVO, forfaitaire excretie 2026) ----------
+// Tabel 6 (melk- en kalfkoeien): kg fosfaat per koe per jaar naar melkproductie per koe per jaar.
+const FOSFAAT_TABEL = [
+  [0, 32.4], [5625, 34.0], [5875, 34.8], [6125, 35.5], [6375, 36.2], [6625, 36.9], [6875, 37.7], [7125, 38.4],
+  [7375, 39.1], [7625, 39.8], [7875, 40.6], [8125, 41.3], [8375, 42.0], [8625, 42.7], [8875, 43.5], [9125, 44.2],
+  [9375, 44.9], [9625, 45.6], [9875, 46.4], [10125, 47.1], [10375, 47.8], [10625, 49.3],
+];
+// Tabel 4: jongvee voor de melkveehouderij, kg fosfaat per dier per jaar
+const FOSFAAT_KALF = 9.6;   // categorie 101, jonger dan 1 jaar
+const FOSFAAT_PINK = 21.9;  // categorie 102, 1 jaar en ouder
+const DROOG_AANDEEL = 0.14; // schatting aandeel droge koeien als het totaal niet is ingevuld
+function fosfaatKlasse(jaarMelk) {
+  const m = Math.round(jaarMelk);
+  let k = 0;
+  for (let j = 0; j < FOSFAAT_TABEL.length; j++) if (m >= FOSFAAT_TABEL[j][0]) k = j;
+  const van = FOSFAAT_TABEL[k][0], waarde = FOSFAAT_TABEL[k][1];
+  const volg = FOSFAAT_TABEL[k + 1] || null;
+  return { van, tot: volg ? volg[0] - 1 : null, waarde, volgende: volg ? { van: volg[0], waarde: volg[1] } : null, hoogste: !volg };
+}
+function forfaitFosfaat(jaarMelk) { return fosfaatKlasse(jaarMelk).waarde; }
+function fosfaatBeeld(ins, melkPerDag) {
+  const rechten = num(ins.fosfaatrechten, 0);
+  if (!(rechten > 0)) return null;
+  const koeien = num(ins.koeien, 0);
+  const totaalZelf = num(ins.koeienTotaal, 0);
+  const koeienTotaal = totaalZelf > 0 ? totaalZelf : koeien / (1 - DROOG_AANDEEL);
+  const melk0 = num(ins.melk, 28);
+  const jmZelf = num(ins.jaarMelk, 0);
+  const jaarMelk0 = jmZelf > 0 ? jmZelf : (koeienTotaal > 0 ? melk0 * koeien * 365 / koeienTotaal : 0);
+  const m = melkPerDag === undefined ? melk0 : melkPerDag;
+  const jaarMelk = melk0 > 0 ? jaarMelk0 * m / melk0 : jaarMelk0;
+  const klasse = fosfaatKlasse(jaarMelk);
+  const kalveren = num(ins.kalveren, 0), pinken = num(ins.pinken, 0);
+  const jongvee = kalveren * FOSFAAT_KALF + pinken * FOSFAAT_PINK;
+  const koeienDeel = koeienTotaal * klasse.waarde;
+  const productie = koeienDeel + jongvee;
+  const prijs = num(ins.fosfaatPrijs, 118);
+  const tekort = Math.max(0, productie - rechten);
+  return {
+    rechten, koeien, koeienTotaal, totaalGeschat: !(totaalZelf > 0), jaarMelk, jaarMelkGeschat: !(jmZelf > 0),
+    klasse, kalveren, pinken, jongvee, koeienDeel, productie, ruimte: rechten - productie, tekort, prijs,
+    kostenJaar: tekort * prijs, kostenPerKoeDag: koeien > 0 ? tekort * prijs / 365 / koeien : 0,
   };
 }
 
@@ -572,6 +692,8 @@ const NORM_REGELS = [
   { key: 'dsMin', op: '>=', straf: 40 },
   { key: 'oebMax', op: '<=', straf: 30 },
   { key: 'vemMax', op: '<=', straf: 20 },
+  { key: 'zs', op: '<=', straf: 80 },
+  { key: 'suiker', op: '<=', straf: 50 },
 ];
 
 function voerVariabelen(voeders) {
@@ -585,27 +707,32 @@ function grens(v, key) {
   return n === null ? null : Math.max(0, n);
 }
 
-function losRantsoen(vars, B) {
+function losRantsoen(vars, B, ins) {
   const n = vars.length;
   const ds = vars.map(v => num(v.ds, 0) / 100);
-  const lo = vars.map((v, i) => (grens(v, 'min') || 0) * ds[i]);
-  const hi = vars.map((v, i) => { const g = grens(v, 'max'); return g === null ? Infinity : Math.max(g * ds[i], lo[i]); });
+  const gr = vars.map(v => voerGrenzen(v, ins));
+  const lo = vars.map((v, i) => gr[i].min * ds[i]);
+  const hi = vars.map((v, i) => Number.isFinite(gr[i].max) ? Math.max(gr[i].max * ds[i], lo[i]) : Infinity);
+  const zs = vars.map(v => zsWaarden(v));
   const coef = {
     vem: vars.map(v => num(v.vem, 0) / 1000), vemMax: vars.map(v => num(v.vem, 0) / 1000),
     dve: vars.map(v => num(v.dve, 0) / 100),
     oebMin: vars.map(v => num(v.oeb, 0) / 100), oebMax: vars.map(v => num(v.oeb, 0) / 100),
     dsMax: vars.map(() => 1), dsMin: vars.map(() => 1),
     sw: vars.map(v => num(v.sw, 0) - B.swMin),
+    zs: vars.map((v, i) => (zs[i].zs - B.zsMax) / 1000),
+    suiker: vars.map((v, i) => (zs[i].suiker - B.suikerMax) / 1000),
   };
   const rhs = {
     vem: B.vem / 1000, vemMax: B.vemMax / 1000, dve: B.dve / 100,
     oebMin: B.oebMin / 100, oebMax: B.oebMax / 100,
-    dsMax: B.dsMax, dsMin: B.dsMin, sw: 0,
+    dsMax: B.dsMax, dsMin: B.dsMin, sw: 0, zs: 0, suiker: 0,
   };
-  const K = NORM_REGELS.length;
-  const c = vars.map(v => prijsPerKgDs(v)).concat(NORM_REGELS.map(r => r.straf));
+  const regels = NORM_REGELS.filter(r => !(r.key === 'zs' && !Number.isFinite(B.zsMax)) && !(r.key === 'suiker' && !Number.isFinite(B.suikerMax)));
+  const K = regels.length;
+  const c = vars.map(v => prijsPerKgDs(v)).concat(regels.map(r => r.straf));
   const rows = [];
-  NORM_REGELS.forEach((r, k) => {
+  regels.forEach((r, k) => {
     const a = new Array(n + K).fill(0);
     let b = rhs[r.key];
     coef[r.key].forEach((f, i) => { a[i] = f; b -= f * lo[i]; });
@@ -625,15 +752,22 @@ function losRantsoen(vars, B) {
 }
 
 function totalen(voeders, kgDsMap) {
-  let ds = 0, vem = 0, dve = 0, oeb = 0, swSom = 0, kosten = 0;
+  let ds = 0, vem = 0, dve = 0, oeb = 0, swSom = 0, kosten = 0, zsSom = 0, suikerSom = 0;
+  const onbekend = [], geschat = [];
   voeders.forEach(v => {
     if (v.soort === 'mineraal') { kosten += mineraalKosten(v); return; }
     const x = kgDsMap[v.id] || 0;
     if (!x) return;
+    const w = zsWaarden(v);
+    if (w.bron === 'onbekend') onbekend.push(v.naam); else if (w.bron === 'schatting') geschat.push(v.naam);
     ds += x; vem += x * num(v.vem, 0); dve += x * num(v.dve, 0); oeb += x * num(v.oeb, 0);
     swSom += x * num(v.sw, 0); kosten += x * prijsPerKgDs(v);
+    zsSom += x * w.zs; suikerSom += x * w.suiker;
   });
-  return { ds, vem, dve, oeb, sw: ds > 0 ? swSom / ds : 0, kosten, dichtheid: ds > 0 ? vem / ds : 970 };
+  return {
+    ds, vem, dve, oeb, sw: ds > 0 ? swSom / ds : 0, kosten, dichtheid: ds > 0 ? vem / ds : 970,
+    zs: ds > 0 ? zsSom / ds : 0, suiker: ds > 0 ? suikerSom / ds : 0, zsOnbekend: onbekend, zsGeschat: geschat,
+  };
 }
 
 function toets(T, B) {
@@ -647,6 +781,8 @@ function toets(T, B) {
   if (T.ds > B.dsMax + 0.05) p.push({ key: 'dsMax', ernst: 'kritiek', tekst: `Meer droge stof (${fmt1(T.ds)} kg) dan de koe kan opnemen (${fmt1(B.dsMax)} kg)` });
   if (T.ds < B.dsMin - 0.05) p.push({ key: 'dsMin', ernst: 'let', tekst: `Weinig droge stof (${fmt1(T.ds)} kg): pens raakt niet gevuld` });
   if (T.ds > 0 && T.sw < B.swMin - 0.02) p.push({ key: 'sw', ernst: 'kritiek', tekst: `Te weinig structuur (${fmt2(T.sw)} per kg DS, minimaal ${fmt2(B.swMin)})` });
+  if (T.ds > 0 && Number.isFinite(B.zsMax) && T.zs > B.zsMax + 2) p.push({ key: 'zs', ernst: 'kritiek', tekst: `Te veel zetmeel en suiker (${r0(T.zs)} g per kg DS, maximaal ${r0(B.zsMax)})` });
+  if (T.ds > 0 && Number.isFinite(B.suikerMax) && T.suiker > B.suikerMax + 2) p.push({ key: 'suiker', ernst: 'let', tekst: `Veel suiker (${r0(T.suiker)} g per kg DS, maximaal ${r0(B.suikerMax)})` });
   return p;
 }
 
@@ -660,7 +796,7 @@ function optimaal(voeders, ins, melk) {
   let dicht = 970, kgDs = null, B = null;
   for (let it = 0; it < 4; it++) {
     B = behoefte(ins, melk, dicht);
-    kgDs = vars.length ? losRantsoen(vars, B) : [];
+    kgDs = vars.length ? losRantsoen(vars, B, ins) : [];
     if (!kgDs) return null;
     const ds = kgDs.reduce((s, x) => s + x, 0);
     const vem = kgDs.reduce((s, x, i) => s + x * num(vars[i].vem, 0), 0);
@@ -724,11 +860,11 @@ function voerAnalyse(voeders, ins, melk, id) {
   if (!v || v.soort === 'mineraal') return null;
   const ds = num(v.ds, 0) / 100;
   const p0 = prijsPerKgDs(v);
-  const minG = grens(v, 'min'), maxG = grens(v, 'max');
-  const lo = (minG || 0) * ds, hi = maxG === null ? Infinity : Math.max(maxG * ds, lo);
-  const res = { id, p0, lo, hi, status: '', x0: 0, omhoog: null, omlaag: null, gratisNul: false };
+  const gr = voerGrenzen(v, ins);
+  const lo = gr.min * ds, hi = Number.isFinite(gr.max) ? Math.max(gr.max * ds, lo) : Infinity;
+  const res = { id, p0, lo, hi, grenzen: gr, status: '', x0: 0, omhoog: null, omlaag: null, gratisNul: false };
   if (v.actief === false) { res.status = 'uit'; return res; }
-  if (maxG !== null && Math.abs(hi - lo) < 1e-9) { res.status = 'vast'; res.x0 = lo; return res; }
+  if (Number.isFinite(hi) && Math.abs(hi - lo) < 1e-9) { res.status = 'vast'; res.x0 = lo; return res; }
   const R = optimaal(voeders, ins, melk);
   const x0 = R ? (R.kgDs[id] || 0) : 0;
   res.x0 = x0;
@@ -773,7 +909,7 @@ function saldoCurve(voeders, ins, melkPrijzen) {
   return pts;
 }
 
-if (typeof module !== 'undefined') module.exports = { behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
+if (typeof module !== "undefined") module.exports = { voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
 
 </script>
 <script>
@@ -811,6 +947,8 @@ const STANDAARD_INS = {
   koeien: 100, melk: 28, vet: 4.4, eiwit: 3.6, lg: 675, beweiding: 'stal', toeslag: 0,
   dsAuto: true, dsOpname: 20.5, swMin: 1.0, oebMin: 0, oebMax: 400, vemMarge: 5,
   jeugd: true, extraVem: 0, extraDve: 0,
+  zsMax: 250, suikerMax: 100,
+  fosfaatrechten: '', koeienTotaal: '', jaarMelk: '', kalveren: '', pinken: '', fosfaatPrijs: 118,
 };
 
 const SOORTEN = { ruwvoer: 'Ruwvoer', bijproduct: 'Bijproduct', krachtvoer: 'Krachtvoer', mineraal: 'Mineralen' };
@@ -818,17 +956,17 @@ const EENHEDEN = { ton: '€ per ton product', ton_ds: '€ per ton droge stof',
 
 // Startwaarden voor een nieuw voer. Vervang ze door de kuilanalyse of het productblad.
 const SJABLONEN = [
-  { key: 'graskuil', naam: 'Graskuil', soort: 'ruwvoer', ds: 45, vem: 940, dve: 63, oeb: 45, sw: 2.9, prijs: 170, eenheid: 'ton_ds', uitleg: 'gemiddelde kuil' },
-  { key: 'maiskuil', naam: 'Maïskuil', soort: 'ruwvoer', ds: 38, vem: 1000, dve: 52, oeb: -30, sw: 1.65, prijs: 150, eenheid: 'ton_ds', uitleg: 'gemiddelde kuil' },
-  { key: 'stro', naam: 'Stro (gehakseld)', soort: 'ruwvoer', ds: 88, vem: 425, dve: -5, oeb: -18, sw: 4.3, prijs: 150, eenheid: 'ton', max: 1.5, uitleg: 'tarwestro' },
-  { key: 'tgc', naam: 'Tarwegistconcentraat', soort: 'bijproduct', ds: 33, vem: 1050, dve: 170, oeb: 70, sw: 0, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, eiwitrijk' },
-  { key: 'bierbostel', naam: 'Bierbostel', soort: 'bijproduct', ds: 22, vem: 910, dve: 129, oeb: 70, sw: 0.6, prijs: '', eenheid: 'ton', max: 12, uitleg: 'vochtrijk, eiwitrijk' },
-  { key: 'persvezels', naam: 'Aardappelpersvezels', soort: 'bijproduct', ds: 16, vem: 1022, dve: 94, oeb: -69, sw: 0.4, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, energierijk' },
-  { key: 'perspulp', naam: 'Bietenperspulp', soort: 'bijproduct', ds: 25, vem: 1060, dve: 93, oeb: -64, sw: 0.7, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, energierijk' },
-  { key: 'brok120', naam: 'Standaardbrok 120 DVE', soort: 'krachtvoer', ds: 88, vem: 1091, dve: 136, oeb: 10, sw: 0.2, wurDve: '120', eenheid: '100kg', max: 12, uitleg: 'prijs volgens WUR' },
-  { key: 'brok180', naam: 'Eiwitrijke brok 180 DVE', soort: 'krachtvoer', ds: 88, vem: 1091, dve: 205, oeb: 60, sw: 0.2, wurDve: '180', eenheid: '100kg', max: 6, uitleg: 'prijs volgens WUR' },
+  { key: 'graskuil', naam: 'Graskuil', soort: 'ruwvoer', ds: 45, vem: 940, dve: 63, oeb: 45, sw: 2.9, zetmeel: 0, suiker: 90, prijs: 170, eenheid: 'ton_ds', uitleg: 'gemiddelde kuil' },
+  { key: 'maiskuil', naam: 'Maïskuil', soort: 'ruwvoer', ds: 38, vem: 1000, dve: 52, oeb: -30, sw: 1.65, zetmeel: 360, suiker: 10, prijs: 150, eenheid: 'ton_ds', uitleg: 'gemiddelde kuil' },
+  { key: 'stro', naam: 'Stro (gehakseld)', soort: 'ruwvoer', ds: 88, vem: 425, dve: -5, oeb: -18, sw: 4.3, zetmeel: 0, suiker: 10, prijs: 150, eenheid: 'ton', max: 1.5, uitleg: 'tarwestro' },
+  { key: 'tgc', naam: 'Tarwegistconcentraat', soort: 'bijproduct', ds: 33, vem: 1050, dve: 170, oeb: 70, sw: 0, zetmeel: 40, suiker: 40, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, eiwitrijk' },
+  { key: 'bierbostel', naam: 'Bierbostel', soort: 'bijproduct', ds: 22, vem: 910, dve: 129, oeb: 70, sw: 0.6, zetmeel: 40, suiker: 10, prijs: '', eenheid: 'ton', max: 12, uitleg: 'vochtrijk, eiwitrijk' },
+  { key: 'persvezels', naam: 'Aardappelpersvezels', soort: 'bijproduct', ds: 16, vem: 1022, dve: 94, oeb: -69, sw: 0.4, zetmeel: 250, suiker: 10, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, energierijk' },
+  { key: 'perspulp', naam: 'Bietenperspulp', soort: 'bijproduct', ds: 25, vem: 1060, dve: 93, oeb: -64, sw: 0.7, zetmeel: 0, suiker: 60, prijs: '', eenheid: 'ton', max: 15, uitleg: 'vochtrijk, energierijk' },
+  { key: 'brok120', naam: 'Standaardbrok 120 DVE', soort: 'krachtvoer', ds: 88, vem: 1091, dve: 136, oeb: 10, sw: 0.2, zetmeel: 200, suiker: 70, wurDve: '120', eenheid: '100kg', max: 12, uitleg: 'prijs volgens WUR' },
+  { key: 'brok180', naam: 'Eiwitrijke brok 180 DVE', soort: 'krachtvoer', ds: 88, vem: 1091, dve: 205, oeb: 60, sw: 0.2, zetmeel: 120, suiker: 80, wurDve: '180', eenheid: '100kg', max: 6, uitleg: 'prijs volgens WUR' },
   { key: 'mineraal', naam: 'Mineralenmengsel', soort: 'mineraal', huidig: 100, prijs: '', eenheid: 'kg', uitleg: 'vaste gift' },
-  { key: 'leeg', naam: '', soort: 'bijproduct', ds: '', vem: '', dve: '', oeb: '', sw: '', prijs: '', eenheid: 'ton', uitleg: 'alles zelf invullen' },
+  { key: 'leeg', naam: '', soort: 'bijproduct', ds: '', vem: '', dve: '', oeb: '', sw: '', zetmeel: '', suiker: '', prijs: '', eenheid: 'ton', uitleg: 'alles zelf invullen' },
 ];
 const STARTSET = ['graskuil', 'maiskuil', 'stro', 'tgc', 'mineraal', 'mineraal'];
 
@@ -1111,7 +1249,7 @@ function uitSjabloon(key, volgorde) {
   const v = { naam: t.naam, soort: t.soort, eenheid: t.eenheid, actief: true, bron: 'standaard', volgorde };
   if (t.soort === 'mineraal') { v.huidig = t.huidig || 100; v.prijs = t.prijs; }
   else {
-    ['ds', 'vem', 'dve', 'oeb', 'sw', 'prijs'].forEach(k => { v[k] = t[k]; });
+    ['ds', 'vem', 'dve', 'oeb', 'sw', 'zetmeel', 'suiker', 'prijs'].forEach(k => { v[k] = t[k] === undefined ? '' : t[k]; });
     v.huidig = 0; v.min = ''; v.max = t.max ?? '';
     if (t.wurDve) { const m = prijzen().wur.mengvoer; v.prijs = m && m[t.wurDve] ? m[t.wurDve] : ''; v.wurDve = t.wurDve; }
   }
@@ -1315,9 +1453,13 @@ function viewRantsoen() {
     const h = num(v.huidig, 0);
     const a = O ? kgProduct(v, O.kgDs[v.id] || 0) : 0;
     const uit = v.actief === false;
-    const opMax = v.max !== '' && v.max != null && O && Math.abs(a - num(v.max, 0)) < 0.05;
-    const opMin = num(v.min, 0) > 0 && O && Math.abs(a - num(v.min, 0)) < 0.05;
-    const sub = uit ? 'niet gebruiken in advies' : opMax ? 'op maximum' : opMin ? 'op minimum' : '';
+    const g = voerGrenzen(v, i);
+    const opMax = Number.isFinite(g.max) && O && Math.abs(a - g.max) < 0.05;
+    const opMin = g.min > 0 && O && Math.abs(a - g.min) < 0.05;
+    const sub = uit ? 'niet gebruiken in advies'
+      : opMax && opMin && g.bronMax === 'voorraad' ? 'voorraad precies opvoeren'
+      : opMax ? (g.bronMax === 'voorraad' ? 'voorraad moet meegaan' : 'op maximum')
+      : opMin ? (g.bronMin === 'voorraad' ? 'voorraad moet op' : 'op minimum') : '';
     rijen += `<tr data-act="info" data-i="voer" data-id="${esc(v.id)}"><td class="naam"><span class="naamregel">${esc(v.naam)}${uitlegKnop('voer', v.id, v.naam)}</span>${sub ? `<small>${sub}</small>` : ''}</td><td class="n">${n(h, 1)}</td><td class="n adv">${O ? n(a, 1) : '–'}</td></tr>`;
   });
   out += `<section class="panel">
@@ -1350,8 +1492,12 @@ function viewRantsoen() {
       <dt>Voerkosten per 100 kg melk</dt><dd>${eur(e.per100)}</dd>
       <dt class="tot">Voersaldo per koe per dag</dt><dd class="tot">${eur(e.saldo)}</dd>
     </dl>
+    ${(() => { const F = fosfaatBeeld(i); return F && F.tekort > 0 ? `<p class="small">Na het bijleasen van ${n(F.tekort)} kg fosfaatrechten (${eur(F.kostenPerKoeDag)} per koe per dag) blijft er <b>${eur(e.saldo - F.kostenPerKoeDag)}</b> per koe per dag over. ${uitlegKnop('fosfaat', '', 'fosfaatrechten')}</p>` : ''; })()}
     <p class="small muted">Koppel: ${eur(e.saldo * koeien * 30.4, 0)} voersaldo per maand (${n(koeien)} koeien × 30,4 dagen). ${melkprijsBron(i, P)}</p>
   </section>`;
+
+  // Fosfaatrechten
+  out += viewFosfaat(i);
 
   // Loont meer melk?
   out += viewCurve(i, P);
@@ -1382,11 +1528,11 @@ function tipBij(p) {
 
 function normMeters(R) {
   const B = R.B, T = R.T;
-  const rij = (naam, eenh, waardeTekst, status, min, max, bandVan, bandTot, waarde) => {
+  const rij = (naam, eenh, waardeTekst, status, min, max, bandVan, bandTot, waarde, pil) => {
     const span = max - min;
     const pos = x => Math.max(0, Math.min(100, (x - min) / span * 100));
-    const pilTekst = { ok: 'goed', let: status === 'let' && waarde > bandTot ? 'hoog' : 'laag', kritiek: waarde < bandVan ? 'tekort' : 'te hoog' }[status];
-    const sleutel = { Energie: 'vem', Eiwit: 'dve', Pensbalans: 'oeb', 'Droge stof': 'ds', Structuur: 'sw' }[naam];
+    const pilTekst = pil || { ok: 'goed', let: status === 'let' && waarde > bandTot ? 'hoog' : 'laag', kritiek: waarde < bandVan ? 'tekort' : 'te hoog' }[status];
+    const sleutel = { Energie: 'vem', Eiwit: 'dve', Pensbalans: 'oeb', 'Droge stof': 'ds', Structuur: 'sw', 'Zetmeel + suiker': 'zs' }[naam];
     return `<div class="norm" data-act="info" data-i="${sleutel}"><span class="nm"><span class="nm-naam">${naam}<small>${eenh}</small>${uitlegKnop(sleutel, '', naam)}</span><span class="pil ${status}">${pilTekst}</span></span><span class="wd">${waardeTekst}</span>
       <div class="meter" role="img" aria-label="${naam}: ${waardeTekst}, ${pilTekst}"><div class="band" style="left:${pos(bandVan)}%;width:${Math.max(1, pos(bandTot) - pos(bandVan))}%"></div><div class="vul ${status}" style="width:${pos(waarde)}%"></div></div></div>`;
   };
@@ -1396,6 +1542,9 @@ function normMeters(R) {
   const sO = T.oeb < B.oebMin - 5 ? 'kritiek' : T.oeb > B.oebMax + 5 ? 'let' : 'ok';
   const sDs = T.ds > B.dsMax + 0.05 ? 'kritiek' : T.ds < B.dsMin - 0.05 ? 'let' : 'ok';
   const sSw = T.sw < B.swMin - 0.02 ? 'kritiek' : 'ok';
+  const zsGrens = Number.isFinite(B.zsMax);
+  const sZs = zsGrens && T.zs > B.zsMax + 2 ? 'kritiek' : Number.isFinite(B.suikerMax) && T.suiker > B.suikerMax + 2 ? 'let' : 'ok';
+  const zsSchaal = Math.max(400, (zsGrens ? B.zsMax : 0) + 100, T.zs + 50);
   const oebMin = Math.min(-200, T.oeb - 50), oebMax = Math.max(B.oebMax + 200, T.oeb + 50);
   return `<div class="normen">
     ${rij('Energie', 'VEM2022', `${n(pV)}% · ${n(T.vem)} van ${n(B.vem)}`, sV, 60, 130, 100, 100 + num(ins().vemMarge, 5), pV)}
@@ -1403,7 +1552,9 @@ function normMeters(R) {
     ${rij('Pensbalans', 'OEB', `${n(T.oeb)} g (${n(B.oebMin)} tot ${n(B.oebMax)})`, sO, oebMin, oebMax, B.oebMin, B.oebMax, T.oeb)}
     ${rij('Droge stof', 'opname', `${n(T.ds, 1)} kg (${n(B.dsMin, 1)} tot ${n(B.dsMax, 1)})`, sDs, 10, 30, B.dsMin, B.dsMax, T.ds)}
     ${rij('Structuur', 'SW per kg DS', `${n(T.sw, 2)} (minimaal ${n(B.swMin, 2)})`, sSw, 0, 3, B.swMin, 3, T.sw)}
-  </div>`;
+    ${rij('Zetmeel + suiker', 'g per kg DS', `${n(T.zs)} g, waarvan suiker ${n(T.suiker)} g${zsGrens ? ` (max ${n(B.zsMax)})` : ' (geen grens)'}`, sZs, 0, zsSchaal, 0, zsGrens ? B.zsMax : zsSchaal, T.zs, sZs === 'let' ? 'veel suiker' : '')}
+  </div>
+  ${T.zsOnbekend && T.zsOnbekend.length ? `<p class="small muted">Zetmeel en suiker onbekend voor ${zinLijst(T.zsOnbekend.map(esc))}; de app telt die als 0. Vul ze in bij Voeders.</p>` : ''}`;
 }
 
 // ---------- Getalinvoer met ±-knop ----------
@@ -1449,15 +1600,19 @@ function bindendeNormen(R) {
   if (Math.abs(T.ds - B.dsMax) < 0.06) uit.push(`de droge stof zit op het maximum dat de koe opneemt (${n(B.dsMax, 1)} kg)`);
   if (Math.abs(T.ds - B.dsMin) < 0.06) uit.push(`de droge stof zit op het minimum (${n(B.dsMin, 1)} kg)`);
   if (Math.abs(T.sw - B.swMin) < 0.01) uit.push(`de structuur zit op het minimum (${n(B.swMin, 2)} per kg DS)`);
+  if (Number.isFinite(B.zsMax) && Math.abs(T.zs - B.zsMax) < 2) uit.push(`zetmeel + suiker zit op het maximum (${n(B.zsMax)} g per kg DS)`);
+  if (Number.isFinite(B.suikerMax) && Math.abs(T.suiker - B.suikerMax) < 2) uit.push(`suiker zit op het maximum (${n(B.suikerMax)} g per kg DS)`);
   return uit;
 }
 function voerenOpGrens(R) {
   const uit = [];
+  const i = ins();
   S.voeders.forEach(v => {
     if (v.soort === 'mineraal' || v.actief === false) return;
     const x = kgProduct(v, R.kgDs[v.id] || 0);
-    if (v.max !== '' && v.max != null && Math.abs(x - num(v.max, 0)) < 0.05) uit.push(`${esc(v.naam)} op het maximum (${n(num(v.max, 0), 1)} kg)`);
-    else if (num(v.min, 0) > 0 && Math.abs(x - num(v.min, 0)) < 0.05) uit.push(`${esc(v.naam)} op het minimum (${n(num(v.min, 0), 1)} kg)`);
+    const g = voerGrenzen(v, i);
+    if (Number.isFinite(g.max) && Math.abs(x - g.max) < 0.05) uit.push(`${esc(v.naam)} op het maximum (${n(g.max, 1)} kg${g.bronMax === 'voorraad' ? ', door de voorraad' : ''})`);
+    else if (g.min > 0 && Math.abs(x - g.min) < 0.05) uit.push(`${esc(v.naam)} op het minimum (${n(g.min, 1)} kg${g.bronMin === 'voorraad' ? ', door de voorraad' : ''})`);
   });
   return uit;
 }
@@ -1488,6 +1643,7 @@ function openUitleg(onderwerp, id) {
     voer: () => uitlegVoer(id), advies: uitlegAdvies, saldo: uitlegSaldo, verschil: uitlegVerschil,
     kosten100: uitlegKosten100, kosten: uitlegKosten, ds: uitlegDs, vem: uitlegVem, dve: uitlegDve,
     oeb: uitlegOeb, sw: uitlegSw, melkgeld: uitlegMelkgeld, curve: uitlegCurve,
+    zs: uitlegZs, voorraad: () => uitlegVoorraad(id), fosfaat: uitlegFosfaat,
   }[onderwerp];
   if (!fn) return;
   const html = fn();
@@ -1517,10 +1673,16 @@ function uitlegVoer(id) {
     waarom = `<p>Je hebt ingesteld dat ${naam} <b>niet in het advies</b> mag. Zet het weer aan bij Voeders → ${naam} → "Mag gebruikt worden in het advies".</p>`;
   } else if (a.status === 'vast') {
     kop = `Waarom ${n(kgA, 1)} kg?`;
-    waarom = `<p>Je hebt het minimum en maximum gelijk gezet. De app geeft dan altijd precies ${n(kgA, 1)} kg en kijkt niet naar de prijs.</p>`;
+    const g = a.grenzen;
+    waarom = g.plan && (g.bronMin === 'voorraad' || g.bronMax === 'voorraad')
+      ? `<p>De voorraad moet precies op zijn op ${datumNL(g.plan.datum)}. Dat is ${n(g.plan.perDag, 1)} kg per koe per dag. De app geeft daarom precies die hoeveelheid en kijkt niet naar de prijs.</p>`
+      : `<p>Je hebt het minimum en maximum gelijk gezet. De app geeft dan altijd precies ${n(kgA, 1)} kg en kijkt niet naar de prijs.</p>`;
   } else if (a.status === 'nul' || a.status === 'min') {
     kop = a.status === 'nul' ? 'Waarom 0 kg?' : `Waarom alleen het minimum (${n(kgA, 1)} kg)?`;
-    waarom = `<p>De andere voeders leveren de energie en het eiwit die ${naam} geeft <b>goedkoper</b>.${a.status === 'min' ? ` Je hebt een minimum ingesteld, anders zou het advies er nog minder van geven.` : ''}</p>`;
+    const minReden = a.grenzen.bronMin === 'voorraad'
+      ? ` Omdat de voorraad op ${datumNL(a.grenzen.plan.datum)} op moet zijn, geeft het advies er minimaal ${n(a.grenzen.plan.perDag, 1)} kg per koe per dag van. Zonder die planning zou het minder zijn.`
+      : ' Je hebt een minimum ingesteld, anders zou het advies er nog minder van geven.';
+    waarom = `<p>De andere voeders leveren de energie en het eiwit die ${naam} geeft <b>goedkoper</b>.${a.status === 'min' ? minReden : ''}</p>`;
     if (a.gratisNul) {
       waarom += `<p>Zelfs als ${naam} gratis was, zou de app er niet meer van nemen. De normen laten geen ruimte: ${zinLijst(grenzen) || 'andere voeders vullen de behoefte al'}.</p>`;
     } else {
@@ -1529,7 +1691,9 @@ function uitlegVoer(id) {
     }
   } else if (a.status === 'max') {
     kop = `Waarom het maximum (${n(kgA, 1)} kg)?`;
-    waarom = `<p>${naam} is <b>goedkoop</b> voor wat het levert. Daarom gebruikt de app het maximum dat je hebt ingesteld; zonder maximum zou het advies er meer van geven.</p>
+    waarom = `<p>${naam} is <b>goedkoop</b> voor wat het levert. ${a.grenzen.bronMax === 'voorraad'
+      ? `Het advies zou er meer van willen geven, maar de voorraad moet meegaan tot ${datumNL(a.grenzen.plan.datum)}. Meer dan ${n(a.grenzen.plan.perDag, 1)} kg per koe per dag kan daarom niet.`
+      : 'Daarom gebruikt de app het maximum dat je hebt ingesteld; zonder maximum zou het advies er meer van geven.'}</p>
       <div class="vergelijk-prijs"><div><span class="label">Kost nu</span><b>${pNu}</b></div><div><span class="label">Blijft op maximum tot</span><b>${a.omhoog !== null ? prijsTekst(v, a.omhoog) : 'veel hoger'}</b></div></div>
       <p>Pas boven ${a.omhoog !== null ? prijsTekst(v, a.omhoog) : 'een veel hogere prijs'} gebruikt de app minder ${naam}.</p>`;
   } else {
@@ -1556,8 +1720,10 @@ function uitlegVoer(id) {
     <h3>Wat levert 1 kg droge stof ${naam}?</h3>
     <div class="analyse"><span class="cel"><em>DS</em><b>${n(num(v.ds, 0))}%</b></span><span class="cel"><em>VEM</em><b>${n(num(v.vem, 0))}</b></span><span class="cel"><em>DVE</em><b>${n(num(v.dve, 0))}</b></span><span class="cel"><em>OEB</em><b>${n(num(v.oeb, 0))}</b></span><span class="cel"><em>SW</em><b>${n(num(v.sw, 0), 2)}</b></span></div>
     ${vwp > 0 && ptp > 0 ? `<p class="small muted">Ter vergelijking: volgens de WUR-voederwaardeprijzen is deze energie en dit eiwit ${eur(vwp, 0)} per ton product waard. Jullie prijs is ${n(ptp / vwp * 100)}% daarvan. De WUR kijkt alleen naar energie en eiwit, niet naar structuur, OEB of de rest van jullie rantsoen. Daarom kan de waarde in dit rantsoen anders uitvallen.</p>` : ''}
+    ${voorraadBlok(v, a.grenzen)}
+    <p class="small muted">Zetmeel + suiker: ${(() => { const w = zsWaarden(v); return `${n(w.zetmeel)} g zetmeel en ${n(w.suiker)} g suiker per kg DS${w.bron === 'schatting' ? ` (schatting voor ${esc(w.label)}; vul de analyse in voor een beter advies)` : w.bron === 'onbekend' ? ' (onbekend, telt als 0; vul de analyse in)' : ''}`; })()}.</p>
     ${standaard ? `<div class="melding let"><span class="stip"></span><div>Voor ${naam} rekent de app met <b>standaardwaarden</b>, niet met een analyse van jullie eigen voer. Met de echte analyse en prijs kan het advies anders uitvallen.</div></div>` : ''}
-    ${(a.status === 'nul' || a.status === 'min') && v.soort === 'ruwvoer' ? `<div class="melding info"><span class="stip"></span><div>De app weet niet dat eigen ruwvoer op moet, en kent geen grens voor maïs of zetmeel. Wil je ${naam} toch voeren, stel dan een minimum in. Dan rekent de app de rest van het rantsoen daaromheen.</div></div>` : ''}
+    ${(a.status === 'nul' || a.status === 'min') && v.soort === 'ruwvoer' ? `<div class="melding info"><span class="stip"></span><div>Moet ${naam} op, of wil je het toch voeren? Vul bij dit voer de voorraad in met een datum en kies "Moet op zijn op die datum", of stel een minimum in. Dan rekent de app de rest van het rantsoen daaromheen.</div></div>` : ''}
     ${S.kanSchrijven ? `<div class="knoppen"><button class="btn" data-act="bewerk" data-id="${esc(v.id)}">Prijs, minimum of maximum aanpassen</button></div>` : ''}`;
 }
 
@@ -1585,7 +1751,8 @@ function uitlegAdvies() {
       <li>OEB: tussen ${n(B.oebMin)} en ${n(B.oebMax)} g</li>
       <li>Droge stof: tussen ${n(B.dsMin, 1)} en ${n(B.dsMax, 1)} kg</li>
       <li>Structuur: minimaal ${n(B.swMin, 2)} per kg DS</li>
-      <li>Het minimum en maximum dat je per voer hebt ingesteld</li>
+      <li>Zetmeel + suiker: ${Number.isFinite(B.zsMax) ? `maximaal ${n(B.zsMax)} g per kg DS` : 'geen grens'}${Number.isFinite(B.suikerMax) ? `, waarvan suiker maximaal ${n(B.suikerMax)} g` : ''}</li>
+      <li>Het minimum en maximum per voer, en de voorraadplanning (voorraad moet meegaan of op)</li>
     </ul>
     <h3>Wat bepaalt dit advies?</h3>
     ${grenzen.length ? `<p>De grenzen die het advies vastzetten: ${zinLijst(grenzen)}. Binnen die grenzen kiest de app steeds het voer dat de benodigde energie en het eiwit het goedkoopst levert.</p>` : '<p>Geen enkele norm zit precies op de grens; de app kiest de goedkoopste voeders.</p>'}
@@ -1593,11 +1760,11 @@ function uitlegAdvies() {
     ${schaduw}
     <h3>Wat de app niet weet</h3>
     <ul>
-      <li>Of eigen ruwvoer op moet, of hoeveel voorraad er is</li>
-      <li>Grenzen voor zetmeel en suiker, of hoeveel maïs je maximaal wilt voeren</li>
+      <li>Hoeveel voorraad er is, als je die niet invult bij het voer</li>
+      <li>Bestendig zetmeel, vetzuren en mineralen in het rantsoen</li>
       <li>Smakelijkheid, mengbaarheid en wat de koeien in de praktijk doen</li>
     </ul>
-    <p>Stel daarvoor per voer een minimum of maximum in (Voeders → voer aantikken). De melkgift houdt de app vast op ${n(num(i.melk, 0), 1)} kg; of meer melk loont, zie je in de grafiek "Loont het om op meer melk te voeren?".</p>`;
+    <p>Stel daarvoor per voer een minimum of maximum of de voorraad in (Voeders → voer aantikken). De melkgift houdt de app vast op ${n(num(i.melk, 0), 1)} kg; of meer melk loont, zie je in de grafiek "Loont het om op meer melk te voeren?".</p>`;
 }
 
 function uitlegSaldo() {
@@ -1755,13 +1922,108 @@ function uitlegMelkgeld() {
 }
 
 function uitlegCurve() {
+  const F = fosfaatBeeld(ins());
   return `${bladKop('Loont het om op meer melk te voeren?')}
-    <p>Voor elke melkgift van 8 kg minder tot 8 kg meer dan nu rekent de app opnieuw het goedkoopste rantsoen uit. De lijn laat het voersaldo per koe per dag zien.</p>
+    <p>Voor elke melkgift van 8 kg minder tot 8 kg meer dan nu rekent de app opnieuw het goedkoopste rantsoen uit. De lijn laat het saldo per koe per dag zien.</p>
+    <p class="som">Voersaldo = melk × melkprijs − voerkosten van het goedkoopste rantsoen</p>
+    ${F ? `<p class="som">Saldo na fosfaat = voersaldo − kosten van het fosfaattekort per koe per dag</p>
+      <p>Meer melk per koe verhoogt de melk per koe per jaar. Daarmee schuift het bedrijf in de RVO-tabel naar een hogere klasse en is er meer fosfaatrecht nodig. Het tekort rekent de app tegen de leaseprijs (${eur(F.prijs)} per kg per jaar). De lijn maakt daarom kleine sprongen bij elke klassegrens. De grijze lijn is het voersaldo zonder fosfaatkosten.</p>
+      <p class="small muted">De app schat de melk per koe per jaar bij elke dagproductie naar verhouding: ${n(F.jaarMelk)} kg bij ${n(num(ins().melk, 0), 1)} kg per dag.</p>`
+      : '<p>Vul bij Bedrijf jullie fosfaatrechten in. Dan rekent de app ook mee dat meer melk per koe meer fosfaatrechten kost.</p>'}
     <ul>
-      <li>Stijgt de lijn: de extra melk brengt meer op dan het extra voer kost.</li>
+      <li>Stijgt de lijn: de extra melk brengt meer op dan het extra voer${F ? ' en de extra rechten kosten' : ' kost'}.</li>
       <li>Gestippeld: met deze voeders zijn de normen bij die melkgift niet te halen.</li>
     </ul>
     <p>Of de koeien die melk ook echt geven, weet de app niet. Dat hangt af van lactatiestadium, genetica en gezondheid.</p>`;
+}
+
+function voorraadBlok(v, g) {
+  if (!g || !g.plan) {
+    return num(v.voorraad, 0) > 0 ? `<p class="small muted">Voorraad: ${n(num(v.voorraad, 0), 1)} ton. Er is geen planning ingesteld, dus de app houdt er geen rekening mee. ${uitlegKnop('voorraad', v.id, 'voorraadplanning')}</p>` : '';
+  }
+  if (g.plan.verlopen) return `<div class="melding let"><span class="stip"></span><div>De planningsdatum (${datumNL(g.plan.datum)}) is voorbij. De app houdt geen rekening met de voorraad. Kies een nieuwe datum bij dit voer.</div></div>`;
+  const koeien = num(ins().koeien, 0);
+  const wat = { mee: 'moet meegaan tot', op: 'moet op zijn op', precies: 'wordt precies opgevoerd tot' }[g.plan.type];
+  return `<h3>Voorraad</h3>
+    <p class="som">${n(num(v.voorraad, 0), 1)} ton × 1.000 ÷ (${n(g.plan.dagen)} dagen × ${n(koeien)} koeien) = <b>${n(g.plan.perDag, 1)} kg</b> per koe per dag</p>
+    <p>De voorraad ${wat} ${datumNL(g.plan.datum)}. ${g.bronMax === 'voorraad' && g.bronMin === 'voorraad' ? 'Daarom geeft het advies precies deze hoeveelheid.' : g.bronMax === 'voorraad' ? 'Daarom geeft het advies er niet meer dan dit van.' : g.bronMin === 'voorraad' ? 'Daarom geeft het advies er minimaal dit van.' : 'Je zelf ingestelde minimum of maximum is strenger, dus dat telt.'}</p>
+    ${g.conflict ? `<div class="melding let"><span class="stip"></span><div>De planning botst met het minimum of maximum dat je zelf hebt ingesteld. De app volgt je eigen grens, dus de voorraad ${g.plan.type === 'mee' ? 'is eerder op dan gepland' : 'is op de datum nog niet op'}.</div></div>` : ''}`;
+}
+
+function uitlegVoorraad(id) {
+  const v = id && S.voeders.find(x => x.id === id);
+  const koeien = num(ins().koeien, 0);
+  const g = v ? voerGrenzen(v, ins()) : null;
+  return `${bladKop('Voorraadplanning')}
+    <p>Vul de voorraad in (in ton product) en tot welke datum die moet dienen, bijvoorbeeld tot de nieuwe oogst. De app rekent uit hoeveel er per koe per dag beschikbaar is:</p>
+    <p class="som">voorraad × 1.000 ÷ (dagen tot de datum × aantal melkkoeien) = kg per koe per dag</p>
+    ${g && g.plan && !g.plan.verlopen ? `<p class="som">${esc(v.naam)}: ${n(num(v.voorraad, 0), 1)} × 1.000 ÷ (${n(g.plan.dagen)} × ${n(koeien)}) = <b>${n(g.plan.perDag, 1)} kg</b></p>` : ''}
+    <ul>
+      <li><b>Moet meegaan tot die datum:</b> het advies geeft er nooit meer van, zodat je niet te vroeg zonder zit.</li>
+      <li><b>Moet op zijn op die datum:</b> het advies geeft er minstens zoveel van, bijvoorbeeld voor eigen graskuil die op moet voor de nieuwe oogst.</li>
+      <li><b>Precies opvoeren:</b> allebei, dus precies die hoeveelheid per dag.</li>
+    </ul>
+    <p>Vul alleen de voorraad in die voor de <b>melkkoeien</b> is. Trek het deel voor jongvee en droge koeien eraf, want de app rekent met het aantal melkkoeien (${n(koeien)}).</p>
+    <p class="small muted">Het aantal dagen telt vanaf vandaag. De hoeveelheid per dag verandert dus elke dag een beetje, en past zich aan als je de voorraad bijwerkt. Een minimum of maximum dat je zelf instelt, gaat altijd voor.</p>`;
+}
+
+function uitlegZs() {
+  const { R, naam } = huidigOfAdvies();
+  const B = R.B;
+  let rijen = '', zsTot = 0, suTot = 0;
+  gesorteerd().forEach(v => {
+    if (v.soort === 'mineraal') return;
+    const x = R.kgDs[v.id] || 0;
+    if (x < 0.005) return;
+    const w = zsWaarden(v);
+    zsTot += x * w.zs; suTot += x * w.suiker;
+    rijen += `<tr><td>${esc(v.naam)}<small class="muted">${n(x, 1)} kg DS × ${n(w.zs)} g${w.bron === 'schatting' ? ' (geschat)' : w.bron === 'onbekend' ? ' (onbekend)' : ''}</small></td><td class="n">${n(x * w.zs)} g</td><td class="n">${n(x * w.suiker)} g</td></tr>`;
+  });
+  return `${bladKop('Zetmeel + suiker')}
+    <p>Zetmeel en suiker zijn snelle energie. In de pens maken bacteriën er zuren van. Te veel tegelijk verzuurt de pens: de koe vreet minder, het vetgehalte daalt en het risico op klauwproblemen stijgt.</p>
+    <p class="som">Gemiddeld = som van (kg DS × g zetmeel + suiker per voer) ÷ totaal kg DS</p>
+    <p class="som">${n(zsTot)} g ÷ ${n(R.T.ds, 1)} kg DS = <b>${n(R.T.zs)} g per kg DS</b>, waarvan suiker ${n(R.T.suiker)} g</p>
+    <h3>Per voer in ${naam}</h3>
+    <div class="tabel-wrap"><table class="rt uitleg-tabel"><thead><tr><th>Voer</th><th>Zetmeel + suiker</th><th>Suiker</th></tr></thead><tbody>${rijen}</tbody>
+    <tfoot><tr><td>Totaal</td><td class="n">${n(zsTot)} g</td><td class="n">${n(suTot)} g</td></tr></tfoot></table></div>
+    <h3>Welke grens?</h3>
+    <p>Er is <b>geen officiële Nederlandse norm</b> voor zetmeel en suiker samen. De app gebruikt standaard maximaal <b>250 g per kg DS</b>. Dat is een voorzichtige grens: een rantsoen met veel maïs en granen zit er al snel boven. Daarnaast houdt de app suiker onder <b>100 g per kg DS</b>; daarboven daalt de pensactiviteit en neemt de kans op pensverzuring toe (ALNN). Nu ingesteld: ${Number.isFinite(B.zsMax) ? `maximaal ${n(B.zsMax)} g` : 'geen grens'}${Number.isFinite(B.suikerMax) ? `, suiker maximaal ${n(B.suikerMax)} g` : ''}.</p>
+    <p>Pas de grenzen aan bij Bedrijf → Normen voor het advies, het liefst in overleg met jullie voeradviseur. Laat het veld leeg om geen grens te gebruiken.</p>
+    <p class="small muted">Bestendig zetmeel (dat pas in de darm wordt verteerd) rekent de app niet apart. Het Handboek Melkveehouderij adviseert in de late lactatie maximaal 30 g bestendig zetmeel per kg DS.</p>
+    ${R.T.zsGeschat && R.T.zsGeschat.length ? `<div class="melding let"><span class="stip"></span><div>Voor ${zinLijst(R.T.zsGeschat.map(esc))} rekent de app met een <b>schatting</b> op basis van de naam. Een kuilanalyse geeft het zetmeel- en suikergehalte; vul die in bij Voeders voor een betrouwbaarder advies.</div></div>` : ''}
+    ${R.T.zsOnbekend && R.T.zsOnbekend.length ? `<div class="melding kritiek"><span class="stip"></span><div>Voor ${zinLijst(R.T.zsOnbekend.map(esc))} weet de app het zetmeel en suiker niet; die tellen als 0. Vul de waarden van het productblad in.</div></div>` : ''}`;
+}
+
+function uitlegFosfaat() {
+  const i = ins();
+  const F = fosfaatBeeld(i);
+  const intro = `<p>Elk melkveebedrijf moet genoeg <b>fosfaatrechten</b> hebben voor de fosfaat die de koeien en het jongvee in een jaar produceren. RVO rekent die productie uit met vaste getallen per dier (forfaits), niet met jullie rantsoen. Hoe meer melk per koe per jaar, hoe hoger het forfait per koe.</p>`;
+  if (!F) return `${bladKop('Fosfaatrechten')}${intro}<p>Vul bij Bedrijf → Fosfaatrechten in hoeveel rechten jullie hebben. Dan rekent de app uit of jullie ruimte hebben of tekortkomen, en wat extra melk aan rechten kost.</p>`;
+  const k = F.klasse;
+  const naarVolgende = k.volgende ? k.volgende.van - F.jaarMelk : null;
+  return `${bladKop('Fosfaatrechten')}
+    ${intro}
+    <h3>Zo rekent de app</h3>
+    <p class="som">Melk per koe per jaar: ${F.jaarMelkGeschat ? `${n(num(i.melk, 0), 1)} kg × ${n(F.koeien)} melkkoeien × 365 ÷ ${n(F.koeienTotaal)} koeien = ` : ''}<b>${n(F.jaarMelk)} kg</b>${F.jaarMelkGeschat ? ' (geschat)' : ''}</p>
+    <p class="som">RVO-tabel 6 (2026): ${n(k.van)}${k.tot ? `–${n(k.tot)}` : ' en meer'} kg melk = <b>${n(k.waarde, 1)} kg fosfaat</b> per koe per jaar</p>
+    <p class="som">Koeien: ${n(F.koeienTotaal)}${F.totaalGeschat ? ' (geschat)' : ''} × ${n(k.waarde, 1)} = ${n(F.koeienDeel)} kg</p>
+    ${F.jongvee ? `<p class="som">Jongvee: ${n(F.kalveren)} jonger dan 1 jaar × 9,6 + ${n(F.pinken)} van 1 jaar en ouder × 21,9 = ${n(F.jongvee)} kg</p>` : '<p class="small muted">Jongvee is niet ingevuld. Heb je jongvee, vul het in bij Bedrijf, want het telt mee.</p>'}
+    <p class="som">Productie ${n(F.productie)} kg − rechten ${n(F.rechten)} kg = <b>${F.ruimte >= 0 ? `${n(F.ruimte)} kg ruimte` : `${n(-F.ruimte)} kg tekort`}</b></p>
+    ${F.tekort > 0 ? `<p class="som">Tekort bijleasen: ${n(F.tekort)} kg × ${eur(F.prijs)} = <b>${eur(F.kostenJaar, 0)}</b> per jaar = ${eur(F.kostenPerKoeDag)} per melkkoe per dag</p>` : ''}
+    <h3>Wat betekent dit voor meer melk?</h3>
+    ${k.hoogste ? `<p>Boven ${n(10625)} kg melk per koe stijgt het forfait niet meer (${n(k.waarde, 1)} kg). Meer melk per koe kost jullie dus geen extra fosfaatrechten.</p>`
+      : `<p>Nog ${n(naarVolgende)} kg melk per koe per jaar tot de volgende klasse. Daar is het ${n(k.volgende.waarde, 1)} kg per koe: ${n(k.volgende.waarde - k.waarde, 1)} kg × ${n(F.koeienTotaal)} koeien = ${n((k.volgende.waarde - k.waarde) * F.koeienTotaal)} kg fosfaat extra${F.ruimte > 0 ? `. Jullie hebben ${n(F.ruimte)} kg ruimte; ${(k.volgende.waarde - k.waarde) * F.koeienTotaal <= F.ruimte ? 'die stap past nog' : 'die stap past daar niet meer in'}` : `, à ${eur(F.prijs)} = ${eur((k.volgende.waarde - k.waarde) * F.koeienTotaal * F.prijs, 0)} per jaar`}.</p>
+         <p>Gemiddeld kost elke 1.000 kg extra melk per koe ongeveer 2,85 kg fosfaatrecht. In de grafiek "Loont het om op meer melk te voeren?" rekent de app dit mee.</p>`}
+    <h3>Goed om te weten</h3>
+    <ul>
+      <li>Voor de fosfaatrechten telt de RVO-tabel, niet het rantsoen. Rekenen met de eigen uitscheiding (BEX) mag hier volgens RVO niet. Een rantsoen met weinig fosfor bespaart dus geen rechten.</li>
+      <li>Het gaat om het jaargemiddelde: de totale melk gedeeld door het gemiddeld aantal melk- en kalfkoeien (inclusief droge koeien).</li>
+      <li>Dezelfde kilo's vet en eiwit in minder liters melk leveren hetzelfde melkgeld op, maar hebben minder rechten nodig.</li>
+      <li>Leaseprijs nu ingesteld: ${eur(F.prijs)} per kg per jaar. Eind oktober 2026 was dat rond € 118; kopen kostte rond € 345 per kg. Pas de prijs aan bij Bedrijf.</li>
+      <li>Te weinig rechten aan het eind van het jaar is een economisch delict. Bespreek tekorten op tijd met jullie adviseur of accountant.</li>
+    </ul>
+    ${F.jaarMelkGeschat || F.totaalGeschat ? `<div class="melding let"><span class="stip"></span><div>${F.totaalGeschat ? `Het aantal melk- en kalfkoeien is geschat (melkkoeien plus ongeveer 14% droge koeien). ` : ''}${F.jaarMelkGeschat ? 'De melk per koe per jaar is geschat uit de dagproductie. ' : ''}Vul de echte getallen in bij Bedrijf (jaaropgave van de zuivel of de MPR-uitslag), want de klasse kan een paar honderd kilo melk verschuiven.</div></div>` : ''}
+    <p class="small muted">Bron: RVO, tabel 6 (forfaitaire fosfaatexcretie melkkoeien 2026) en tabel 4 (jongvee, categorie 101 en 102).</p>`;
 }
 
 function openMelkprijs() {
@@ -1807,24 +2069,37 @@ function viewCurve(i, P) {
   const pts = saldoCurve(S.voeders, i, P.melk);
   curveData = pts;
   if (pts.length < 3) return '';
+  const F0 = fosfaatBeeld(i);
+  pts.forEach(p => {
+    const F = F0 ? fosfaatBeeld(i, p.melk) : null;
+    p.fosfaat = F ? F.kostenPerKoeDag : 0;
+    p.waarde = p.saldo - p.fosfaat;
+  });
   const m0 = Math.round(num(i.melk, 28));
   const haalbaar = pts.filter(p => p.haalbaar);
-  const beste = haalbaar.length ? haalbaar.reduce((a, b) => (b.saldo > a.saldo ? b : a)) : null;
+  const beste = haalbaar.length ? haalbaar.reduce((a, b) => (b.waarde > a.waarde ? b : a)) : null;
   const nu = pts.find(p => p.melk === m0);
   const volgende = pts.find(p => p.melk === m0 + 1);
   const prijsKg = melkprijsPerKg(i, P.melk);
   let zin = '';
   if (nu && volgende && volgende.haalbaar) {
     const extraKost = volgende.kosten - nu.kosten;
-    zin = `Van ${m0} naar ${m0 + 1} kg melk kost <b>${eur(extraKost)}</b> extra voer en levert <b>${eur(prijsKg)}</b> extra melkgeld op. ${extraKost < prijsKg ? 'Meer melk loont, als de koeien die melk kunnen geven.' : 'Meer melk loont niet: het extra voer kost meer dan de melk opbrengt.'}`;
+    const extraF = volgende.fosfaat - nu.fosfaat;
+    const netto = prijsKg - extraKost - extraF;
+    zin = `Van ${m0} naar ${m0 + 1} kg melk kost <b>${eur(extraKost)}</b> extra voer${F0 ? ` en <b>${eur(extraF)}</b> extra fosfaatrechten` : ''}, en levert <b>${eur(prijsKg)}</b> extra melkgeld op (per koe per dag). ${netto > 0.005 ? `Er blijft ${eur(netto)} over: meer melk loont, als de koeien die melk kunnen geven.` : `Er blijft niets over: meer melk loont niet${F0 && extraF > 0.005 ? ', vooral door de fosfaatrechten' : ''}.`}`;
+    if (F0 && extraF < 0.005 && F0.ruimte > 0) zin += ` Jullie hebben nog fosfaatruimte, dus die extra melk kost (nog) geen rechten.`;
   } else if (nu && volgende && !volgende.haalbaar) {
     const R1 = optimaal(S.voeders, i, m0 + 1);
     const reden = R1 && R1.problemen.find(p => p.ernst === 'kritiek');
-    zin = `Met deze voeders is ${m0 + 1} kg melk niet haalbaar binnen de normen${reden ? ` (${esc(reden.tekst.toLowerCase())})` : ''}.`;
+    zin = `Met deze voeders is ${m0 + 1} kg melk niet haalbaar binnen de normen${reden ? ` (${esc(klein(reden.tekst))})` : ''}.`;
+  }
+  if (beste && nu && beste.melk !== m0 && beste.waarde - nu.waarde > 0.02) {
+    zin += `${zin ? '</p><p>' : ''}Het hoogste saldo in de grafiek ligt bij <b>${beste.melk} kg melk</b>: ${eur(beste.waarde)} per koe per dag, ${eur(beste.waarde - nu.waarde)} meer dan nu.`;
+    if (F0 && beste.melk < m0 && beste.fosfaat < nu.fosfaat) zin += ` Bij minder melk per koe zijn minder fosfaatrechten nodig, en dat weegt hier zwaarder dan het melkgeld dat je misloopt. Of de koeien zo'n lagere productie goed verdragen, en wat het doet met vruchtbaarheid en gezondheid, rekent de app niet; bespreek dit met jullie adviseur.`;
   }
   // SVG
   const W = 340, H = 204, L = 44, Rr = 12, T = 14, Bm = 42;
-  const xs = pts.map(p => p.melk), ys = pts.map(p => p.saldo);
+  const xs = pts.map(p => p.melk), ys = pts.map(p => p.waarde).concat(F0 ? pts.map(p => p.saldo) : []);
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
   let yMin = Math.min(...ys), yMax = Math.max(...ys);
   const stap = niceStap((yMax - yMin) / 4 || 1);
@@ -1836,20 +2111,21 @@ function viewCurve(i, P) {
   for (let y = yMin; y <= yMax + 1e-9; y += stap) grid += `<line x1="${L}" x2="${W - Rr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${Y(y) + 4}" text-anchor="end">€ ${n(y, stap < 1 ? 1 : 0)}</text>`;
   let xt = '';
   for (let x = Math.ceil(xMin / 2) * 2; x <= xMax; x += 2) xt += `<text x="${X(x)}" y="${H - Bm + 16}" text-anchor="middle">${x}</text>`;
-  pts.forEach(p => { p.px = X(p.melk); p.py = Y(p.saldo); });
-  const pad = arr => arr.map((p, k) => `${k ? 'L' : 'M'}${X(p.melk).toFixed(1)},${Y(p.saldo).toFixed(1)}`).join('');
+  pts.forEach(p => { p.px = X(p.melk); p.py = Y(p.waarde); });
+  const pad = (arr, f) => arr.map((p, k) => `${k ? 'L' : 'M'}${X(p.melk).toFixed(1)},${Y(f(p)).toFixed(1)}`).join('');
   const segOk = [], segNiet = [];
   pts.forEach((p, k) => {
     if (k === 0) return;
     const a = pts[k - 1];
-    (a.haalbaar && p.haalbaar ? segOk : segNiet).push(`M${X(a.melk).toFixed(1)},${Y(a.saldo).toFixed(1)}L${X(p.melk).toFixed(1)},${Y(p.saldo).toFixed(1)}`);
+    (a.haalbaar && p.haalbaar ? segOk : segNiet).push(`M${X(a.melk).toFixed(1)},${Y(a.waarde).toFixed(1)}L${X(p.melk).toFixed(1)},${Y(p.waarde).toFixed(1)}`);
   });
-  const area = haalbaar.length > 1 ? `<path d="${pad(haalbaar)}L${X(haalbaar[haalbaar.length - 1].melk)},${H - Bm}L${X(haalbaar[0].melk)},${H - Bm}Z" fill="var(--mais-strong)" opacity=".14"/>` : '';
-  const merkNu = nu ? `<circle cx="${X(nu.melk)}" cy="${Y(nu.saldo)}" r="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><text class="ink" x="${X(nu.melk)}" y="${Y(nu.saldo) + 20}" text-anchor="middle">nu</text>` : '';
-  const merkBeste = beste && (!nu || beste.melk !== nu.melk) ? `<circle cx="${X(beste.melk)}" cy="${Y(beste.saldo)}" r="6" fill="var(--mais-strong)" stroke="var(--surface)" stroke-width="2"/><text class="ink" x="${X(beste.melk) > W - 60 ? X(beste.melk) + 4 : X(beste.melk)}" y="${Y(beste.saldo) - 12}" text-anchor="${X(beste.melk) > W - 60 ? 'end' : 'middle'}">hoogste haalbaar</text>` : '';
-  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Voersaldo per koe per dag bij ${xMin} tot ${xMax} kg melk">
+  const area = haalbaar.length > 1 ? `<path d="${pad(haalbaar, p => p.waarde)}L${X(haalbaar[haalbaar.length - 1].melk)},${H - Bm}L${X(haalbaar[0].melk)},${H - Bm}Z" fill="var(--mais-strong)" opacity=".14"/>` : '';
+  const zonderF = F0 ? `<path d="${pad(haalbaar.length > 1 ? haalbaar : pts, p => p.saldo)}" fill="none" stroke="var(--ink-3)" stroke-width="1.5" stroke-linejoin="round"/>` : '';
+  const merkNu = nu ? `<circle cx="${X(nu.melk)}" cy="${Y(nu.waarde)}" r="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><text class="ink" x="${X(nu.melk)}" y="${Y(nu.waarde) + 20}" text-anchor="middle">nu</text>` : '';
+  const merkBeste = beste && (!nu || beste.melk !== nu.melk) ? `<circle cx="${X(beste.melk)}" cy="${Y(beste.waarde)}" r="6" fill="var(--mais-strong)" stroke="var(--surface)" stroke-width="2"/><text class="ink" x="${X(beste.melk) > W - 60 ? X(beste.melk) + 4 : X(beste.melk)}" y="${Y(beste.waarde) - 12}" text-anchor="${X(beste.melk) > W - 60 ? 'end' : 'middle'}">hoogste haalbaar</text>` : '';
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${F0 ? 'Saldo na voer en fosfaatrechten' : 'Voersaldo'} per koe per dag bij ${xMin} tot ${xMax} kg melk">
     ${grid}${xt}<text x="${(L + W - Rr) / 2}" y="${H - 4}" text-anchor="middle">kg melk per koe per dag</text>
-    ${area}
+    ${area}${zonderF}
     <path d="${segNiet.join('')}" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="4 4"/>
     <path d="${segOk.join('')}" fill="none" stroke="var(--mais-strong)" stroke-width="2.5" stroke-linecap="round"/>
     ${merkBeste}${merkNu}
@@ -1857,13 +2133,39 @@ function viewCurve(i, P) {
     <circle id="kruis-punt" r="5" fill="var(--ink)" visibility="hidden"/>
     <rect id="grafiek-vlak" x="${L}" y="0" width="${W - L - Rr}" height="${H - Bm}" fill="transparent" data-x0="${xMin}" data-x1="${xMax}"/>
   </svg>`;
-  const tabel = pts.map(p => `<tr><td>${p.melk} kg</td><td class="n">${eur(p.kosten)}</td><td class="n">${eur(p.saldo)}</td><td>${p.haalbaar ? 'ja' : 'nee'}</td></tr>`).join('');
+  const tabel = pts.map(p => `<tr><td>${p.melk} kg</td><td class="n">${eur(p.kosten)}</td><td class="n">${eur(p.saldo)}</td>${F0 ? `<td class="n">${eur(p.fosfaat)}</td><td class="n">${eur(p.waarde)}</td>` : ''}<td>${p.haalbaar ? 'ja' : 'nee'}</td></tr>`).join('');
+  const legenda = F0 ? `<div class="legenda"><span><i class="lijn mais"></i>Na voer en fosfaatrechten</span><span><i class="lijn grijs"></i>Alleen voersaldo</span></div>` : '';
   return `<section class="panel">
     <div class="sectie-kop"><h2>Loont het om op meer melk te voeren? ${uitlegKnop('curve', '', 'grafiek meer melk')}</h2></div>
-    <p class="small muted">Voersaldo per koe per dag bij het goedkoopste rantsoen voor elke melkgift. Gestippeld: niet haalbaar binnen de normen met deze voeders.</p>
+    <p class="small muted">${F0 ? 'Saldo per koe per dag na voerkosten en na het bijleasen van fosfaatrechten' : 'Voersaldo per koe per dag'}, bij het goedkoopste rantsoen voor elke melkgift. Gestippeld: niet haalbaar binnen de normen met deze voeders.</p>
+    ${legenda}
     <div class="grafiek" id="grafiek" data-l="${L}" data-w="${W}" data-r="${Rr}" data-h="${H}">${svg}<div class="tip" id="grafiek-tip" hidden></div></div>
     ${zin ? `<p>${zin}</p>` : ''}
-    <details class="tabelweergave"><summary>Als tabel</summary><div class="tabel-wrap"><table class="rt"><thead><tr><th>Melk</th><th>Voerkosten</th><th>Voersaldo</th><th>Haalbaar</th></tr></thead><tbody>${tabel}</tbody></table></div></details>
+    ${!F0 ? '<p class="small muted">Vul bij Bedrijf jullie fosfaatrechten in; dan rekent de grafiek ook de kosten van extra rechten mee.</p>' : ''}
+    <details class="tabelweergave"><summary>Als tabel</summary><div class="tabel-wrap"><table class="rt"><thead><tr><th>Melk</th><th>Voerkosten</th><th>Voersaldo</th>${F0 ? '<th>Fosfaat</th><th>Saldo na fosfaat</th>' : ''}<th>Haalbaar</th></tr></thead><tbody>${tabel}</tbody></table></div></details>
+  </section>`;
+}
+function viewFosfaat(i) {
+  const F = fosfaatBeeld(i);
+  if (!F) return `<section class="panel"><div class="sectie-kop"><h2>Fosfaatrechten ${uitlegKnop('fosfaat', '', 'fosfaatrechten')}</h2></div>
+    <p class="small muted">Vul jullie fosfaatrechten in om te zien of jullie ruimte hebben of tekortkomen, en wat extra melk aan rechten kost.</p>
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn klein" data-act="naar-koppel">Fosfaatrechten invullen</button></div>' : ''}</section>`;
+  const schaal = Math.max(F.rechten, F.productie) * 1.08;
+  const pos = x => Math.max(0, Math.min(100, x / schaal * 100));
+  const status = F.ruimte >= 0 ? 'ok' : 'kritiek';
+  const k = F.klasse;
+  return `<section class="panel">
+    <div class="sectie-kop"><h2>Fosfaatrechten ${uitlegKnop('fosfaat', '', 'fosfaatrechten')}</h2><span class="small muted">jaar 2026</span></div>
+    <div class="norm" data-act="info" data-i="fosfaat"><span class="nm"><span class="nm-naam">Fosfaatproductie<small>kg per jaar</small></span><span class="pil ${status}">${F.ruimte >= 0 ? `${n(F.ruimte)} kg ruimte` : `${n(-F.ruimte)} kg tekort`}</span></span><span class="wd">${n(F.productie)} van ${n(F.rechten)} kg</span>
+      <div class="meter" role="img" aria-label="Fosfaatproductie ${n(F.productie)} kg van ${n(F.rechten)} kg rechten"><div class="band" style="left:0;width:${pos(F.rechten)}%"></div><div class="vul ${status}" style="width:${pos(F.productie)}%"></div></div></div>
+    <dl class="kv">
+      <dt>Melk per koe per jaar${F.jaarMelkGeschat ? ' (geschat)' : ''}</dt><dd>${n(F.jaarMelk)} kg</dd>
+      <dt>Fosfaat per koe (RVO-klasse ${n(k.van)}${k.tot ? `–${n(k.tot)}` : '+'})</dt><dd>${n(k.waarde, 1)} kg</dd>
+      <dt>${n(F.koeienTotaal)} koeien${F.totaalGeschat ? ' (geschat)' : ''}${F.jongvee ? ' + jongvee' : ''}</dt><dd>${n(F.productie)} kg</dd>
+      ${F.tekort > 0 ? `<dt>Tekort bijleasen à ${eur(F.prijs)}</dt><dd>${eur(F.kostenJaar, 0)} per jaar</dd><dt>Per melkkoe per dag</dt><dd>${eur(F.kostenPerKoeDag)}</dd>` : ''}
+    </dl>
+    <p class="small">${k.hoogste ? 'Boven 10.625 kg per koe stijgt het fosfaat per koe niet meer: extra melk per koe kost geen extra rechten.' : `Nog ${n(k.volgende.van - F.jaarMelk)} kg melk per koe per jaar tot de volgende klasse (+${n(k.volgende.waarde - k.waarde, 1)} kg fosfaat per koe, ${n((k.volgende.waarde - k.waarde) * F.koeienTotaal)} kg voor het koppel).`}</p>
+    ${F.jaarMelkGeschat || F.totaalGeschat ? '<p class="small muted">Enkele getallen zijn geschat. Vul de echte waarden in bij Bedrijf → Fosfaatrechten.</p>' : ''}
   </section>`;
 }
 function niceStap(r) { const p = Math.pow(10, Math.floor(Math.log10(r))); const f = r / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
@@ -1883,7 +2185,7 @@ function bindGrafiek() {
     kruis.setAttribute('x1', cx); kruis.setAttribute('x2', cx); kruis.setAttribute('visibility', 'visible');
     punt.setAttribute('cx', cx); punt.setAttribute('cy', cy); punt.setAttribute('visibility', 'visible');
     tip.hidden = false;
-    tip.innerHTML = `${p.melk} kg melk · saldo ${eur(p.saldo)}<br>voerkosten ${eur(p.kosten)}${p.haalbaar ? '' : ' · niet haalbaar'}`;
+    tip.innerHTML = `${p.melk} kg melk · voersaldo ${eur(p.saldo)}${p.fosfaat ? `<br>fosfaat ${eur(p.fosfaat)} · saldo na fosfaat ${eur(p.waarde)}` : ''}<br>voerkosten ${eur(p.kosten)}${p.haalbaar ? '' : ' · niet haalbaar'}`;
     tip.style.left = Math.max(80, Math.min(r.width - 80, cx / W * r.width)) + 'px';
     tip.style.top = (cy / +box.dataset.h * r.height) + 'px';
   };
@@ -1930,6 +2232,12 @@ function voerKaart(v, P, O, koeien) {
   const grenzen = [];
   if (v.min !== '' && v.min != null && num(v.min, 0) > 0) grenzen.push('min ' + n(num(v.min, 0), 1));
   if (v.max !== '' && v.max != null) grenzen.push('max ' + n(num(v.max, 0), 1));
+  const gr = voerGrenzen(v, ins());
+  let plan = '';
+  if (gr.plan && gr.plan.verlopen) plan = `<span class="chip duur">planningsdatum voorbij</span>`;
+  else if (gr.plan) plan = `<span>${{ mee: 'moet mee tot', op: 'moet op op', precies: 'opvoeren tot' }[gr.plan.type]} ${datumNL(gr.plan.datum, true)}: <b>${n(gr.plan.perDag, 1)} kg/koe/dag</b></span>`;
+  const zs = zsWaarden(v);
+  const zsTekst = `<span>zetmeel + suiker <b>${n(zs.zs)} g</b>${zs.bron === 'schatting' ? ' (geschat)' : zs.bron === 'onbekend' ? ' (onbekend)' : ''}</span>`;
   return `<button class="voerkaart${uit ? ' uit' : ''}" data-act="bewerk" data-id="${esc(v.id)}"${S.kanSchrijven ? '' : ' disabled'}>
     <span class="vk-kop"><span class="vk-naam">${esc(v.naam)}</span><span class="vk-bron${v.bron === 'standaard' && !v.analyse ? ' std' : ''}">${bron}</span></span>
     <span class="analyse" aria-label="Voederwaarde per kg droge stof">
@@ -1940,7 +2248,9 @@ function voerKaart(v, P, O, koeien) {
       ${pct ? `<span class="chip ${pct <= 100 ? 'goed' : 'duur'}">${n(pct)}% van voederwaarde</span>` : ''}
       ${uit ? '<span class="chip">niet in advies</span>' : ''}
       ${grenzen.length ? `<span>${grenzen.join(' · ')} kg/koe</span>` : ''}
+      ${zsTekst}
       ${voorraad}
+      ${plan}
     </span>
   </button>`;
 }
@@ -1992,6 +2302,18 @@ function viewKoppel() {
       <p class="small muted">${prijzen().melk.integraal ? `Bij maximale toeslagen (Foqus planet, kwantum) kwam de integrale Campina-prijs voor ${maandNL(prijzen().melk.maand)} ${eur(prijzen().melk.integraal - prijzen().melk.garantieprijs)} per 100 kg boven de garantieprijs.` : ''}</p>
     </fieldset></section>
 
+    <section class="panel"><fieldset><legend>Fosfaatrechten ${uitlegKnop('fosfaat', '', 'fosfaatrechten')}</legend>
+      <p class="small muted">Hiermee rekent de app uit of jullie genoeg fosfaatrechten hebben, en wat meer melk per koe aan rechten kost. Getallen staan in de jaaropgave van de zuivel, de MPR-uitslag of jullie managementprogramma.</p>
+      <div class="velden">
+        ${veld('fosfaatrechten', 'Fosfaatrechten', i.fosfaatrechten, 'kg, eigen plus geleasd', '')}
+        ${veld('fosfaatPrijs', 'Leaseprijs fosfaatrecht', i.fosfaatPrijs, '€ per kg per jaar (eind okt. 2026 ca. € 118)', '')}
+        ${veld('koeienTotaal', 'Melk- en kalfkoeien', i.koeienTotaal, 'jaargemiddelde, inclusief droge koeien', '', ` placeholder="geschat ${esc(n(num(i.koeien, 0) / 0.86))}"`)}
+        ${veld('jaarMelk', 'Melk per koe per jaar', i.jaarMelk, 'kg, totale melk ÷ gemiddeld aantal koeien', '', ` placeholder="geschat ${esc(n(num(i.koeienTotaal, 0) > 0 ? num(i.melk, 0) * num(i.koeien, 0) * 365 / num(i.koeienTotaal, 0) : num(i.melk, 0) * 365 * 0.86))}"`)}
+        ${veld('kalveren', 'Jongvee jonger dan 1 jaar', i.kalveren, 'gemiddeld aantal (9,6 kg fosfaat per dier)', '')}
+        ${veld('pinken', 'Jongvee van 1 jaar en ouder', i.pinken, 'gemiddeld aantal (21,9 kg fosfaat per dier)', '')}
+      </div>
+    </fieldset></section>
+
     <section class="panel"><fieldset><legend>Normen voor het advies</legend>
       <label class="vink"><input type="checkbox" id="k-dsAuto" name="dsAuto"${i.dsAuto !== false ? ' checked' : ''}${ro}> Droge-stofopname automatisch schatten</label>
       <div class="velden">
@@ -2000,7 +2322,10 @@ function viewKoppel() {
         ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag', '', '', true)}
         ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag', '', '', true)}
         ${veld('vemMarge', 'Energie boven behoefte', i.vemMarge, '% dat maximaal mag')}
+        ${veld('zsMax', 'Zetmeel + suiker maximaal', i.zsMax, 'g per kg DS; leeg = geen grens')}
+        ${veld('suikerMax', 'Suiker maximaal', i.suikerMax, 'g per kg DS; leeg = geen grens')}
       </div>
+      <p class="small muted">Waarom deze grenzen? ${uitlegKnop('zs', '', 'zetmeel en suiker')}</p>
       <label class="vink"><input type="checkbox" id="k-jeugd" name="jeugd"${i.jeugd !== false ? ' checked' : ''}${ro}> Toeslag jeugdgroei (330 VEM, 37 g DVE, koppelgemiddelde)</label>
       <div class="velden">
         ${veld('extraVem', 'Extra toeslag VEM', i.extraVem, 'bijv. dracht', '', '', true)}
@@ -2039,10 +2364,12 @@ function viewKoppel() {
 function leesKoppelForm() {
   const f = $('#koppelform'); if (!f) return;
   const nieuw = Object.assign({}, ins());
-  ['koeien', 'melk', 'vet', 'eiwit', 'lg', 'toeslag', 'eigenMelkprijs', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'extraVem', 'extraDve'].forEach(k => {
+  ['koeien', 'melk', 'vet', 'eiwit', 'lg', 'toeslag', 'eigenMelkprijs', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'extraVem', 'extraDve',
+    'zsMax', 'suikerMax', 'fosfaatrechten', 'fosfaatPrijs', 'koeienTotaal', 'jaarMelk', 'kalveren', 'pinken'].forEach(k => {
     const el = f.elements[k]; if (!el) return;
     const raw = el.value.trim();
     if (raw === '' && ['toeslag', 'extraVem', 'extraDve', 'oebMin'].includes(k)) { nieuw[k] = 0; return; }
+    if (raw === '' && ['zsMax', 'suikerMax', 'fosfaatrechten', 'koeienTotaal', 'jaarMelk', 'kalveren', 'pinken'].includes(k)) { nieuw[k] = ''; return; }
     const x = num(raw, NaN);
     if (Number.isFinite(x)) nieuw[k] = x;
   });
@@ -2091,6 +2418,7 @@ function kengetallen(b) {
     extra: eO ? (eO.saldo - eH.saldo) * koeien * 30.4 : null,
     tekort, adviesOk: O ? !O.problemen.some(p => p.ernst === 'kritiek') : false,
     dveDekking: H.B.dve > 0 ? H.T.dve / H.B.dve * 100 : 0, vemDekking: H.B.vem > 0 ? H.T.vem / H.B.vem * 100 : 0,
+    fosfaat: fosfaatBeeld(i),
   };
 }
 function viewVergelijk() {
@@ -2124,16 +2452,17 @@ function viewVergelijk() {
   out += `<section class="panel">
     <h2>Alle kengetallen</h2>
     <div class="tabel-wrap"><table class="rt vergelijk">
-      <thead><tr><th>Bedrijf</th><th>Koeien</th><th>Melk</th><th>Vet</th><th>Eiwit</th><th>Voerkosten /100 kg</th><th>Voersaldo /koe/dag</th><th>Voersaldo koppel /maand</th><th>Kans advies /maand</th><th>Normen huidig</th></tr></thead>
+      <thead><tr><th>Bedrijf</th><th>Koeien</th><th>Melk</th><th>Vet</th><th>Eiwit</th><th>Voerkosten /100 kg</th><th>Voersaldo /koe/dag</th><th>Voersaldo koppel /maand</th><th>Kans advies /maand</th><th>Fosfaat­ruimte</th><th>Normen huidig</th></tr></thead>
       <tbody>${rijen.map(r => `<tr${r.b.id === S.bedrijfId ? ' class="actief"' : ''}>
         <td class="naam">${esc(r.b.naam || 'Naamloos')}</td>
         <td class="n">${n(r.koeien)}</td><td class="n">${n(r.melk, 1)} kg</td><td class="n">${n(num(r.i.vet, 0), 2)}%</td><td class="n">${n(num(r.i.eiwit, 0), 2)}%</td>
         <td class="n">${r.voeders ? eur(r.per100) : '–'}</td><td class="n">${r.voeders ? eur(r.saldo) : '–'}</td><td class="n">${r.voeders ? eur(r.saldoMaand, 0) : '–'}</td>
         <td class="n">${r.extra !== null ? eurPlus(r.extra) : '–'}</td>
-        <td>${!r.voeders ? '<span class="muted">geen voeders</span>' : r.tekort.length ? `<span class="pil kritiek">${r.tekort.map(p => ({ vem: 'VEM', dve: 'DVE', oebMin: 'OEB', dsMax: 'DS', sw: 'structuur' }[p.key] || p.key)).join(', ')} tekort</span>` : '<span class="pil ok">gedekt</span>'}</td>
+        <td class="n">${r.fosfaat ? (r.fosfaat.ruimte >= 0 ? `+${n(r.fosfaat.ruimte)} kg` : `<span class="pil kritiek">${n(-r.fosfaat.ruimte)} kg tekort</span>`) : '–'}</td>
+        <td>${!r.voeders ? '<span class="muted">geen voeders</span>' : r.tekort.length ? `<span class="pil kritiek">${r.tekort.map(p => ({ vem: 'VEM tekort', dve: 'DVE tekort', oebMin: 'OEB te laag', dsMax: 'te veel DS', sw: 'te weinig structuur', zs: 'te veel zetmeel' }[p.key] || p.key)).join(', ')}</span>` : '<span class="pil ok">gedekt</span>'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
-    <p class="small muted">Tik op een bedrijf in de grafiek om het rantsoen ervan te openen.</p>
+    <p class="small muted">Tik op een bedrijf in de grafiek om het rantsoen ervan te openen. Fosfaatruimte = fosfaatrechten min de fosfaatproductie volgens de RVO-tabel; "–" als de rechten niet zijn ingevuld.</p>
   </section>`;
   return out;
 }
@@ -2271,8 +2600,11 @@ function openVoer(v, isNieuw) {
         ${veld('dve', 'DVE', d.dve, 'g per kg DS', '', true)}
         ${veld('oeb', 'OEB', d.oeb, 'g per kg DS', '', true)}
         ${veld('sw', 'Structuur (SW)', d.sw, 'per kg DS')}
+        ${veld('zetmeel', 'Zetmeel', d.zetmeel, 'g per kg DS')}
+        ${veld('suiker', 'Suiker', d.suiker, 'g per kg DS')}
         <div class="veld vol"><label for="f-analyse">Analysedatum</label><input id="f-analyse" name="analyse" type="date" value="${esc(d.analyse || '')}"></div>
       </div>
+      <p class="small muted" id="zs-hint"></p>
       <p class="small muted">Staan de waarden per kg product op het verslag? Deel ze door het drogestofpercentage (bijv. 425 VEM per kg bij 45% DS = 944 per kg DS).</p>
     </fieldset>
     <fieldset><legend>Prijs</legend>
@@ -2280,12 +2612,24 @@ function openVoer(v, isNieuw) {
     </fieldset>
     <fieldset><legend>Gebruik in het advies</legend>
       <label class="vink"><input type="checkbox" id="f-actief" name="actief"${d.actief !== false ? ' checked' : ''}> Mag gebruikt worden in het advies</label>
-      <div class="velden drie">
-        ${veld('min', 'Minimaal', d.min, 'kg product/koe')}
-        ${veld('max', 'Maximaal', d.max, 'kg product/koe')}
-        ${veld('voorraad', 'Voorraad', d.voorraad, 'ton product')}
+      <div class="velden">
+        ${veld('min', 'Minimaal', d.min, 'kg product per koe per dag')}
+        ${veld('max', 'Maximaal', d.max, 'kg product per koe per dag')}
       </div>
       <p class="small muted">Zet minimaal en maximaal gelijk om een vaste hoeveelheid te voeren, bijvoorbeeld bij een contract.</p>
+    </fieldset>
+    <fieldset><legend>Voorraad ${uitlegKnop('voorraad', d.id || '', 'voorraadplanning')}</legend>
+      <div class="velden">
+        ${veld('voorraad', 'Voorraad voor de melkkoeien', d.voorraad, 'ton product (zonder deel voor jongvee en droge koeien)', 'vol')}
+        <div class="veld vol"><label for="f-planDatum">Tot datum</label><input id="f-planDatum" name="planDatum" type="date" value="${esc(d.planDatum || '')}"><span class="hint">bijv. de nieuwe oogst</span></div>
+        <div class="veld vol"><label for="f-planType">Planning</label><select id="f-planType" name="planType">
+          <option value=""${!d.planType ? ' selected' : ''}>Geen planning</option>
+          <option value="mee"${d.planType === 'mee' ? ' selected' : ''}>Moet meegaan tot die datum</option>
+          <option value="op"${d.planType === 'op' ? ' selected' : ''}>Moet op zijn op die datum</option>
+          <option value="precies"${d.planType === 'precies' ? ' selected' : ''}>Precies opvoeren tot die datum</option>
+        </select></div>
+      </div>
+      <p class="small" id="plan-hint"></p>
     </fieldset>`;
   }
   html += `<div class="veld"><label for="f-notitie">Notitie</label><textarea id="f-notitie" name="notitie">${esc(d.notitie || '')}</textarea></div>
@@ -2304,8 +2648,31 @@ function openVoer(v, isNieuw) {
       const ptp = prijsPerTonProduct(t);
       h.textContent = `WUR-voederwaarde bij deze analyse: ${eur(vwp, 0)} per ton product${ptp > 0 ? ` · jullie prijs is ${n(ptp / vwp * 100)}% daarvan` : ''}.`;
     };
-    hint();
-    f.addEventListener('input', hint);
+    const zsHint = () => {
+      const h = b.querySelector('#zs-hint'); if (!h) return;
+      const s = zsSchatting(f.elements.naam.value);
+      const leegZ = f.elements.zetmeel.value.trim() === '', leegS = f.elements.suiker.value.trim() === '';
+      if (!leegZ && !leegS) { h.textContent = ''; return; }
+      h.textContent = s
+        ? `Leeg gelaten? Dan rekent de app met een schatting voor ${s.label}: ${leegZ ? s.zetmeel + ' g zetmeel' : ''}${leegZ && leegS ? ' en ' : ''}${leegS ? s.suiker + ' g suiker' : ''} per kg DS. Een analyse is beter.`
+        : 'Leeg gelaten? De app herkent dit voer niet en telt het als 0 g zetmeel en suiker. Vul de waarden van de analyse of het productblad in.';
+    };
+    const planHint = () => {
+      const h = b.querySelector('#plan-hint'); if (!h) return;
+      const t = { voorraad: num(f.elements.voorraad.value, 0), planDatum: f.elements.planDatum.value, planType: f.elements.planType.value, min: f.elements.min.value, max: f.elements.max.value };
+      const koeien = num(ins().koeien, 0);
+      if (!t.voorraad || !t.planDatum) { h.textContent = t.planType ? 'Vul de voorraad en de datum in.' : ''; return; }
+      const dagen = dagenTot(t.planDatum);
+      if (dagen === null) { h.textContent = ''; return; }
+      if (dagen <= 0) { h.textContent = 'Deze datum is al voorbij. Kies een datum in de toekomst.'; return; }
+      const perDag = t.voorraad * 1000 / (dagen * koeien);
+      const zin = `${n(t.voorraad, 1)} ton voor ${n(koeien)} melkkoeien in ${n(dagen)} dagen = ${n(perDag, 1)} kg product per koe per dag.`;
+      const wat = { mee: ` Het advies geeft er niet meer dan dat van, zodat de voorraad meegaat tot ${datumNL(t.planDatum)}.`, op: ` Het advies geeft er minimaal dat van, zodat de voorraad op ${datumNL(t.planDatum)} op is.`, precies: ` Het advies geeft er precies dat van.` }[t.planType] || ' Kies bij Planning of de app hier rekening mee moet houden.';
+      h.textContent = zin + wat;
+    };
+    hint(); zsHint(); planHint();
+    f.addEventListener('input', () => { hint(); zsHint(); planHint(); });
+    f.addEventListener('change', planHint);
     f.elements.soort.addEventListener('change', () => {
       const nu = leesVoerForm(f, true);
       nu.soort = f.elements.soort.value;
@@ -2324,10 +2691,12 @@ function leesVoerForm(f, ruw) {
   const getal = k => { if (!el[k]) return; const r = el[k].value.trim(); d[k] = r === '' ? '' : (Number.isFinite(num(r, NaN)) ? num(r, NaN) : (ruw ? r : NaN)); };
   if (d.soort === 'mineraal' && el.huidig) { getal('huidig'); getal('prijs'); d.eenheid = 'kg'; }
   else if (el.ds) {
-    ['ds', 'vem', 'dve', 'oeb', 'sw', 'prijs', 'min', 'max', 'voorraad'].forEach(getal);
+    ['ds', 'vem', 'dve', 'oeb', 'sw', 'zetmeel', 'suiker', 'prijs', 'min', 'max', 'voorraad'].forEach(getal);
     d.eenheid = el.eenheid.value;
     d.actief = el.actief.checked;
     d.analyse = el.analyse.value || '';
+    d.planDatum = el.planDatum.value || '';
+    d.planType = el.planType.value || '';
   }
   d.notitie = el.notitie.value.trim();
   return d;
@@ -2350,9 +2719,11 @@ function slaVoerOp(f) {
     if (!Number.isFinite(d.sw)) fout('sw', 'Vul een getal in.');
     if (!Number.isFinite(d.prijs) || d.prijs < 0) fout('prijs', 'Vul de prijs in; zonder prijs kan de app niet vergelijken.');
     ['min', 'max', 'voorraad'].forEach(k => { if (d[k] !== '' && !Number.isFinite(d[k])) fout(k, 'Vul een getal in of laat leeg.'); });
+    ['zetmeel', 'suiker'].forEach(k => { if (d[k] !== '' && (!Number.isFinite(d[k]) || d[k] < 0 || d[k] > 900)) fout(k, 'Tussen 0 en 900, of laat leeg.'); });
     if (Number.isFinite(d.min) && Number.isFinite(d.max) && d.max < d.min) fout('max', 'Lager dan het minimum.');
+    if (d.planType && !(num(d.voorraad, 0) > 0)) fout('voorraad', 'Vul de voorraad in voor de planning.');
     const oud = f._voer;
-    if (['ds', 'vem', 'dve', 'oeb', 'sw'].some(k => num(oud[k], null) !== num(d[k], null)) || d.analyse) d.bron = 'eigen';
+    if (['ds', 'vem', 'dve', 'oeb', 'sw', 'zetmeel', 'suiker'].some(k => num(oud[k], null) !== num(d[k], null)) || d.analyse) d.bron = 'eigen';
     if (d.huidig === undefined) d.huidig = 0;
   }
   if (fouten.length) { const eerste = f.querySelector('.veld.fout input'); if (eerste) eerste.focus(); return; }
