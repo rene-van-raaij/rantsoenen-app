@@ -196,6 +196,13 @@ table.uitleg-tabel td small { display: block; font-size: 12.5px; }
 .m-tekst .small { overflow-wrap: anywhere; }
 .m-cijfers { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .m-cijfers .small { font-weight: 400; }
+/* Mengwagen: gevoerd */
+.gevoerd-kop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.gevoerd-kop label { font-weight: 600; font-size: 14px; }
+.gevoerd-kop input[type=date] { min-height: 44px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 16px; min-width: 160px; }
+tr.afwijking td.naam { box-shadow: inset 3px 0 0 var(--mais-strong); padding-left: 10px; }
+tr.afwijking td.naam small { color: var(--ink-2); font-weight: 600; }
+.csv-voorbeeld td, .csv-voorbeeld th { white-space: nowrap; font-size: 12px; }
 .uitleg ol { padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; max-width: 62ch; }
 
 /* Knoppen */
@@ -1045,6 +1052,164 @@ function schaduwPrijzen(voeders, ins, melk) {
   };
 }
 
+
+
+// ---------- Productoverzicht: tot welke prijs past een nieuw voer in het advies? ----------
+// Geeft de hoogste prijs (€ per kg DS) waarbij het advies minstens 1 kg product (en minstens 0,2 kg DS) per koe per dag
+// van het voer neemt, of null als dat zelfs gratis niet gebeurt.
+function waardeInRantsoen(voeders, ins, melk, kandidaat) {
+  const id = '__kandidaat';
+  const tol = Math.max(0.2, num(kandidaat.ds, 100) / 100);
+  // Kosten zoals het advies ze weegt: voer plus mestafvoer. De behoefte hangt via de energiedichtheid licht af van het
+  // rantsoen; een rantsoen met het nieuwe voer telt alleen als het echt goedkoper is dan zonder.
+  const doel = (R, V) => R.T.kosten + V.reduce((t, v) => t + (R.kgDs[v.id] || 0) * (v.soort === 'mineraal' ? 0 : mestLPKosten(v, ins)), 0);
+  const R0 = optimaal(voeders, ins, melk);
+  const basis = R0 && !R0.problemen.some(p => p.ernst === 'kritiek') ? doel(R0, voeders) : Infinity;
+  const f = p => {
+    const kopie = voeders.concat([Object.assign({}, kandidaat, { id, prijs: p * 1000, eenheid: 'ton_ds', actief: true, min: '', planType: '' })]);
+    const R = optimaal(kopie, ins, melk);
+    if (!R) return 0;
+    if (doel(R, kopie) > basis + 0.002) return 0;
+    return R.kgDs[id] || 0;
+  };
+  const gratis = f(0);
+  if (gratis <= tol) return { prijs: null, kgDsGratis: gratis };
+  let lo = 0, hi = 1.5;
+  if (f(hi) > tol) return { prijs: hi, boven: true, kgDsGratis: gratis };
+  for (let k = 0; k < 15; k++) { const m = (lo + hi) / 2; if (f(m) > tol) lo = m; else hi = m; }
+  return { prijs: lo, kgDsGratis: gratis, kgDsBijPrijs: f(lo * 0.97) };
+}
+
+// ---------- Mengwagen: wat er werkelijk gevoerd is ----------
+// Records: { datum, soort: 'periode' | 'dag', koeien, rest, voer: { voerId: kg per dag in de mengwagen } }
+// Een periode geldt vanaf zijn datum tot de volgende periode; een dag (bijv. ingelezen uit CSV) geldt alleen die dag en gaat voor.
+function gevoerdOp(records, datum) {
+  const dag = records.find(r => r.soort === 'dag' && r.datum === datum);
+  if (dag) return dag;
+  let p = null;
+  records.forEach(r => { if (r.soort === 'periode' && r.datum <= datum && (!p || r.datum > p.datum)) p = r; });
+  return p;
+}
+// Kg product per koe per dag (mineralen in gram). Restvoer wordt naar verhouding van elk voer afgetrokken.
+// Een voer zonder waarde in het record gaat niet via de mengwagen (bijv. krachtvoerbox) en ontbreekt in perKoe.
+function gevoerdPerKoe(voeders, rec) {
+  const koeien = num(rec.koeien, 0);
+  let totaal = 0;
+  voeders.forEach(v => { const x = rec.voer ? rec.voer[v.id] : undefined; if (ingevuld(x)) totaal += num(x, 0); });
+  const rest = Math.max(0, Math.min(num(rec.rest, 0), totaal));
+  const factor = totaal > 0 ? 1 - rest / totaal : 1;
+  const perKoe = {};
+  voeders.forEach(v => {
+    const x = rec.voer ? rec.voer[v.id] : undefined;
+    if (!ingevuld(x)) return;
+    const kg = koeien > 0 ? num(x, 0) * factor / koeien : 0;
+    perKoe[v.id] = v.soort === 'mineraal' ? kg * 1000 : kg;
+  });
+  return { perKoe, totaal, rest, factor, koeien };
+}
+// Voeders met 'huidig' = wat er gevoerd is; voeders die niet via de mengwagen gaan houden hun huidige hoeveelheid
+function gevoerdeVoeders(voeders, perKoe) {
+  return voeders.map(v => perKoe[v.id] !== undefined ? Object.assign({}, v, { huidig: perKoe[v.id] }) : v);
+}
+function datumPlus(iso, dagen) {
+  const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + dagen);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// Gemiddeld gevoerd per koe over de dagen tot en met 'tot' (alleen dagen met gegevens)
+function gevoerdGemiddeld(voeders, records, tot, dagen) {
+  const som = {}, aantal = {};
+  let n = 0;
+  for (let k = 0; k < dagen; k++) {
+    const rec = gevoerdOp(records, datumPlus(tot, -k));
+    if (!rec) continue;
+    n++;
+    const g = gevoerdPerKoe(voeders, rec);
+    Object.keys(g.perKoe).forEach(id => { som[id] = (som[id] || 0) + g.perKoe[id]; aantal[id] = (aantal[id] || 0) + 1; });
+  }
+  const perKoe = {};
+  Object.keys(som).forEach(id => { perKoe[id] = som[id] / aantal[id]; });
+  return { perKoe, dagen: n };
+}
+
+// ---------- CSV inlezen (bijv. export van een weegsysteem) ----------
+function parseCsv(tekst) {
+  tekst = String(tekst || '').replace(/^﻿/, '');
+  const eerste = tekst.split(/\r?\n/).find(r => r.trim()) || '';
+  const tel = c => (eerste.match(new RegExp(c === '\t' ? '\t' : '\\' + c, 'g')) || []).length;
+  const delim = ['\t', ';', ','].reduce((a, c) => (tel(c) > tel(a) ? c : a), ',');
+  const rows = []; let rij = [], veld = '', inQ = false;
+  for (let i = 0; i < tekst.length; i++) {
+    const c = tekst[i];
+    if (inQ) {
+      if (c === '"' && tekst[i + 1] === '"') { veld += '"'; i++; }
+      else if (c === '"') inQ = false;
+      else veld += c;
+    } else if (c === '"') inQ = true;
+    else if (c === delim) { rij.push(veld); veld = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && tekst[i + 1] === '\n') i++;
+      rij.push(veld); veld = '';
+      if (rij.some(x => x.trim() !== '')) rows.push(rij.map(x => x.trim()));
+      rij = [];
+    } else veld += c;
+  }
+  rij.push(veld);
+  if (rij.some(x => x.trim() !== '')) rows.push(rij.map(x => x.trim()));
+  return { delim, rows };
+}
+// Datum uit tekst: notatie 'dmj' (31-12-2026), 'mdj' (12/31/2026) of 'jmd' (2026-12-31). Tijd erachter telt niet.
+function parseDatum(s, notatie) {
+  const m = String(s || '').match(/(\d{1,4})[-\/.](\d{1,2})[-\/.](\d{1,4})/);
+  if (!m) return null;
+  let j, mnd, d;
+  if (m[1].length === 4) { j = +m[1]; mnd = +m[2]; d = +m[3]; }
+  else if (notatie === 'mdj') { mnd = +m[1]; d = +m[2]; j = +m[3]; }
+  else { d = +m[1]; mnd = +m[2]; j = +m[3]; }
+  if (j < 100) j += 2000;
+  if (!(mnd >= 1 && mnd <= 12 && d >= 1 && d <= 31 && j > 2000 && j < 2100)) return null;
+  return `${j}-${String(mnd).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+function raadDatumNotatie(waarden) {
+  let dmj = 0, mdj = 0, jmd = 0;
+  waarden.forEach(s => {
+    const m = String(s || '').match(/(\d{1,4})[-\/.](\d{1,2})[-\/.](\d{1,4})/);
+    if (!m) return;
+    if (m[1].length === 4) jmd++;
+    else if (+m[1] > 12) dmj++;
+    else if (+m[2] > 12) mdj++;
+  });
+  return jmd > dmj + mdj ? 'jmd' : mdj > dmj ? 'mdj' : 'dmj';
+}
+// Gewicht: '1.234,5', '1,234.5', '1234,5' en '1234.5' worden allemaal 1234,5
+function parseGewicht(s) {
+  let t = String(s || '').replace(/[^\d.,\-−]/g, '').replace('−', '-');
+  if (!t) return NaN;
+  const k = t.lastIndexOf(','), p = t.lastIndexOf('.');
+  if (k >= 0 && p >= 0) t = k > p ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  else if (k >= 0) t = /,\d{3}$/.test(t) && t.split(',').length > 2 ? t.replace(/,/g, '') : t.replace(',', '.');
+  else if (p >= 0 && t.split('.').length > 2) t = t.replace(/\./g, '');
+  return parseFloat(t);
+}
+// cfg: { datum, voer, kg: kolomnummers; notatie; eenheid 'kg'|'lb'; filters: [{kolom, waarde}] }; koppeling: { productnaam: voerId | '' }
+function csvNaarDagen(rows, cfg, koppeling) {
+  const dagen = {}, nietGekoppeld = {};
+  let gebruikt = 0, gefilterd = 0, fout = 0;
+  const factor = cfg.eenheid === 'lb' ? 0.45359237 : 1;
+  rows.forEach(r => {
+    if ((cfg.filters || []).some(f => f.kolom >= 0 && f.waarde !== '' && f.waarde !== undefined && String(r[f.kolom] || '') !== f.waarde)) { gefilterd++; return; }
+    const datum = parseDatum(r[cfg.datum], cfg.notatie);
+    const kg = parseGewicht(r[cfg.kg]) * factor;
+    const naam = String(r[cfg.voer] || '').trim();
+    if (!datum || !Number.isFinite(kg) || !naam) { fout++; return; }
+    const id = koppeling[naam];
+    if (!id) { nietGekoppeld[naam] = (nietGekoppeld[naam] || 0) + kg; return; }
+    dagen[datum] = dagen[datum] || {};
+    dagen[datum][id] = (dagen[datum][id] || 0) + kg;
+    gebruikt++;
+  });
+  return { dagen, nietGekoppeld, gebruikt, gefilterd, fout };
+}
+
 // ---------- Wat als: scenario's ----------
 // Bouw de instellingen van een scenario: lege velden blijven gelijk aan de huidige situatie.
 function scenarioIns(basis, w) {
@@ -1113,14 +1278,15 @@ function saldoCurve(voeders, ins, melkPrijzen) {
   return pts;
 }
 
-if (typeof module !== "undefined") module.exports = { mestRefVastleggen, reP, mestInstellingen, mestLPKosten, uitscheiding, mestReferentie, mestBeeld, scenarioIns, scenarioUitkomst, waardeVan, voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
+if (typeof module !== "undefined") module.exports = { waardeInRantsoen, gevoerdOp, gevoerdPerKoe, gevoerdeVoeders, datumPlus, gevoerdGemiddeld, parseCsv, parseDatum, raadDatumNotatie, parseGewicht, csvNaarDagen, mestRefVastleggen, reP, mestInstellingen, mestLPKosten, uitscheiding, mestReferentie, mestBeeld, scenarioIns, scenarioUitkomst, waardeVan, voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
 
 </script>
 <script>
 'use strict';
 const STANDALONE = true; // wordt bij het bouwen van de losse app op true gezet
-const APP_VERSIE = '1.6.1';
+const APP_VERSIE = '1.7';
 const WIJZIGINGEN = [
+  ['1.7', '2026-11-01', 'Mengwagen: werkelijk gevoerde hoeveelheden invullen (blijven staan tot je ze verandert) of inlezen uit een CSV-export (zoals FeedLink), vergeleken met het huidige rantsoen en het advies. Productoverzicht van Van Vulpen met per product de prijs waaronder het in jullie rantsoen past.'],
   ['1.6.1', '2026-11-01', 'Uitgebreide uitleg bij de pensbalans (OEB): wat het is, eiwit en OEB per voer, en hoe je meer graskuil in het advies krijgt.'],
   ['1.6', '2026-11-01', 'Mestafvoer: stikstof en fosfaat in de mest per rantsoen, kosten van mestafvoer in het advies, de grafiek, Vergelijk en Wat als. Rantsoengeschiedenis (bewaren, vergelijken, terugzetten) en bewaarde scenario\'s. Prijzen van fosfaatrechten en mestafzet met verloop.'],
   ['1.5', '2026-11-01', 'Tabblad Wat als: scenario\'s voor melk, gehaltes, koeien, melkprijs en fosfaatrechten, en wat 0,1% eiwit of vet waard is. Versienummer en dit overzicht.'],
@@ -1200,7 +1366,7 @@ const STARTSET = ['graskuil', 'maiskuil', 'stro', 'tgc', 'mineraal', 'mineraal']
 // ===================== Toestand =====================
 const S = {
   modus: 'laden', bedrijven: [], alleVoeders: [], bedrijfId: null,
-  ins: null, voeders: [], prijzen: null, bewaard: [],
+  ins: null, voeders: [], prijzen: null, bewaard: [], gevoerd: [], mwWeergave: null, gevoerdDatum: null,
   geladen: { bedrijven: false, voeders: false, prijzen: false },
   kanSchrijven: true, tab: 'rantsoen', weergave: 'advies', bevestig: null, kengetal: 'saldo', alleMomenten: false,
 };
@@ -1267,7 +1433,7 @@ function foutTekst(e) {
   return 'Opslaan lukt nu niet. Controleer de verbinding en probeer het opnieuw.';
 }
 function lokaalOpslaan() {
-  try { localStorage.setItem('rv-lokaal2', JSON.stringify({ bedrijven: S.bedrijven, voeders: S.alleVoeders, bewaard: S.bewaard })); } catch (e) { toast('De opslag op dit toestel is vol. Verwijder oude bewaarde rantsoenen.'); }
+  try { localStorage.setItem('rv-lokaal2', JSON.stringify({ bedrijven: S.bedrijven, voeders: S.alleVoeders, bewaard: S.bewaard, gevoerd: S.gevoerd })); } catch (e) { toast('De opslag op dit toestel is vol. Verwijder oude bewaarde rantsoenen.'); }
 }
 function schrijf(pad, data) {
   if (S.modus !== 'db') { lokaalOpslaan(); return Promise.resolve(); }
@@ -1351,6 +1517,9 @@ async function start() {
   db.collection('voeders').onSnapshot(q => {
     S.alleVoeders = q.docs.map(d => Object.assign({ id: d.id }, d.data())); S.geladen.voeders = true; afleiden(); render();
   }, opslagFout);
+  db.collection('gevoerd').onSnapshot(q => {
+    S.gevoerd = q.docs.map(d => Object.assign({ id: d.id }, d.data())); render();
+  }, () => {});
   db.collection('bewaard').onSnapshot(q => {
     S.bewaard = q.docs.map(d => Object.assign({ id: d.id }, d.data())); render();
   }, () => {});
@@ -1372,7 +1541,7 @@ function startLokaal() {
   S.modus = 'lokaal';
   let data = null;
   try { data = JSON.parse(localStorage.getItem('rv-lokaal2') || 'null'); } catch (e) { data = null; }
-  if (data && data.bedrijven) { S.bedrijven = data.bedrijven; S.alleVoeders = data.voeders || []; S.bewaard = data.bewaard || []; }
+  if (data && data.bedrijven) { S.bedrijven = data.bedrijven; S.alleVoeders = data.voeders || []; S.bewaard = data.bewaard || []; S.gevoerd = data.gevoerd || []; }
   else {
     const b = nieuwBedrijfObject('Bedrijf 1', 1);
     b.ins.voorbeeld = true;
@@ -1391,8 +1560,9 @@ function prijzenLokaalLaden() {
 function prijzenBewaren() { try { localStorage.setItem('rv-prijzen', JSON.stringify(S.prijzen)); } catch (e) { /* vol */ } }
 function prijzenSamenvoegen(nieuw) {
   const oud = prijzen();
-  const uit = { wur: oud.wur, melk: oud.melk, fosfaat: oud.fosfaat, bijgewerkt: oud.bijgewerkt };
+  const uit = { wur: oud.wur, melk: oud.melk, fosfaat: oud.fosfaat, producten: S.prijzen && S.prijzen.producten, bijgewerkt: oud.bijgewerkt };
   let veranderd = false;
+  if (nieuw && nieuw.producten && Array.isArray(nieuw.producten.producten) && nieuw.producten.producten.length && (nieuw.producten.opgehaald || '') > ((uit.producten && uit.producten.opgehaald) || '')) { uit.producten = nieuw.producten; veranderd = true; }
   if (nieuw && nieuw.fosfaat && nieuw.fosfaat.datum && Number.isFinite(nieuw.fosfaat.koop100) && nieuw.fosfaat.datum > oud.fosfaat.datum) { uit.fosfaat = nieuw.fosfaat; veranderd = true; }
   if (nieuw && nieuw.wur && nieuw.wur.datum && Number.isFinite(nieuw.wur.kvem) && (!S.prijzen || nieuw.wur.datum > oud.wur.datum)) { uit.wur = nieuw.wur; veranderd = true; }
   if (nieuw && nieuw.melk && nieuw.melk.maand && Number.isFinite(nieuw.melk.eiwitwaarde) && (!S.prijzen || nieuw.melk.maand > oud.melk.maand)) { uit.melk = nieuw.melk; veranderd = true; }
@@ -1467,7 +1637,7 @@ function openPrijzenForm() {
 }
 let backupWacht = null;
 async function backupMaken() {
-  const data = { app: 'rantsoen-voersaldo', versie: 1, gemaakt: new Date().toISOString(), bedrijven: S.bedrijven, voeders: S.alleVoeders, bewaard: S.bewaard, prijzen: S.prijzen };
+  const data = { app: 'rantsoen-voersaldo', versie: 1, gemaakt: new Date().toISOString(), bedrijven: S.bedrijven, voeders: S.alleVoeders, bewaard: S.bewaard, gevoerd: S.gevoerd, prijzen: S.prijzen };
   const naam = 'rantsoen-backup-' + new Date().toISOString().slice(0, 10) + '.json';
   const tekst = JSON.stringify(data, null, 1);
   const file = new File([tekst], naam, { type: 'application/json' });
@@ -1490,7 +1660,7 @@ async function backupLezen(file) {
 }
 function backupTerugzetten() {
   const d = backupWacht; if (!d) return;
-  S.bedrijven = d.bedrijven; S.alleVoeders = d.voeders; S.bewaard = Array.isArray(d.bewaard) ? d.bewaard : [];
+  S.bedrijven = d.bedrijven; S.alleVoeders = d.voeders; S.bewaard = Array.isArray(d.bewaard) ? d.bewaard : []; S.gevoerd = Array.isArray(d.gevoerd) ? d.gevoerd : [];
   if (d.prijzen && d.prijzen.wur && d.prijzen.melk) prijzenSamenvoegen(d.prijzen);
   backupWacht = null; S.bevestig = null; S.bedrijfId = null;
   afleiden(); lokaalOpslaan(); toast('Back-up teruggezet'); render();
@@ -1557,6 +1727,8 @@ async function verwijderBedrijf(id) {
   const b = S.bedrijven.find(x => x.id === id); if (!b) return;
   const voeders = S.alleVoeders.filter(v => v.bedrijf === id);
   const momentenWeg = S.bewaard.filter(m => m.bedrijf === id);
+  const gevoerdWeg = S.gevoerd.filter(r => r.bedrijf === id);
+  S.gevoerd = S.gevoerd.filter(r => r.bedrijf !== id);
   S.bedrijven = S.bedrijven.filter(x => x.id !== id);
   S.alleVoeders = S.alleVoeders.filter(v => v.bedrijf !== id);
   S.bewaard = S.bewaard.filter(m => m.bedrijf !== id);
@@ -1564,6 +1736,7 @@ async function verwijderBedrijf(id) {
   try {
     for (const v of voeders) await verwijder('voeders/' + v.id);
     for (const m of momentenWeg) await verwijder('bewaard/' + m.id);
+    for (const r of gevoerdWeg) await verwijder('gevoerd/' + r.id);
     await verwijder('bedrijven/' + id);
     if (b.logo && assetsNs) await assetsNs.delete(b.logo).catch(() => {});
     toast('Bedrijf verwijderd');
@@ -1795,14 +1968,487 @@ function viewRantsoen() {
     const tot = kgp * koeien;
     if (tot > 0.5) mw += `<dt>${esc(v.naam)}</dt><dd>${n(tot >= 100 ? Math.round(tot / 10) * 10 : tot, tot >= 100 ? 0 : 1)} kg</dd>`;
   });
-  out += `<section class="panel">
-    <div class="sectie-kop"><h2>Mengwagen</h2><span class="small muted">${R === O ? 'advies' : 'huidig rantsoen'}, ${n(koeien)} koeien</span></div>
-    ${mw ? `<dl class="kv">${mw}</dl><p class="small muted">Zonder restvoer. Tel er 2 tot 3% bij voor wat er aan het voerhek overblijft.</p>` : '<p class="muted">Nog geen hoeveelheden.</p>'}
+  const mwW = S.mwWeergave || (gevoerdRecords().length ? 'gevoerd' : 'laden');
+  out += `<section class="panel" id="mengwagen">
+    <div class="sectie-kop"><h2>Mengwagen ${uitlegKnop('mengwagen', '', 'mengwagen')}</h2>
+      <div class="segment" role="group" aria-label="Mengwagen"><button data-act="mw-weergave" data-w="laden" aria-pressed="${mwW === 'laden'}">Laden</button><button data-act="mw-weergave" data-w="gevoerd" aria-pressed="${mwW === 'gevoerd'}">Gevoerd</button></div></div>
+    ${mwW === 'laden' ? `<p class="small muted">Wat er per dag in de mengwagen moet volgens ${R === O ? 'het advies' : 'het huidige rantsoen'}, voor ${n(koeien)} melkkoeien.</p>
+      ${mw ? `<dl class="kv">${mw}</dl><p class="small muted">Zonder restvoer. Tel er 2 tot 3% bij voor wat er aan het voerhek overblijft.</p>` : '<p class="muted">Nog geen hoeveelheden.</p>'}` : viewGevoerd(A)}
   </section>`;
 
   // Geschiedenis
   out += viewGeschiedenis();
   return out;
+}
+
+// ---------- Productoverzicht (Van Vulpen) ----------
+const PRODUCTEN_RESERVE = {"bron":"https://veevoer.nu/","opgehaald":"2026-11-01","producten":[{"naam":"Grasklaver","url":"https://veevoer.nu/product/grasklaver/","categorie":"ruwvoer","diersoorten":["Rundvee","Schapen","Geiten"],"ds":null,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null},{"naam":"Graszaadhooi","url":"https://veevoer.nu/product/graszaadhooi/","categorie":"ruwvoer","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":85,"vem":550,"vevi":550,"dve":25,"oeb":-20,"re":70,"rc":null,"zetmeel":null,"suiker":30,"p":null,"dsBereik":"80-90%"},{"naam":"Aardappelvezels","url":"https://veevoer.nu/product/aardappelvezels/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Rundvee"],"ds":20,"vem":1047,"vevi":1131,"dve":79,"oeb":-83,"re":52,"rc":191,"zetmeel":290,"suiker":11,"p":1.7},{"naam":"Aardappelen biologisch","url":"https://veevoer.nu/product/biologische-aardappelen/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Schapen"],"ds":20,"vem":1097,"vevi":1207,"dve":85,"oeb":3,"re":105,"rc":41,"zetmeel":638,"suiker":7,"p":null},{"naam":"Bierbostel","url":"https://veevoer.nu/product/bierbostel/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":28.5,"vem":964,"vevi":968,"dve":149,"oeb":71,"re":279,"rc":156,"zetmeel":33,"suiker":30,"p":6.5,"dsBereik":"27-30%"},{"naam":"Maisgluten","url":"https://veevoer.nu/product/maisgluten/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":43,"vem":1054,"vevi":1130,"dve":88,"oeb":77,"re":213,"rc":110,"zetmeel":140,"suiker":32,"p":12},{"naam":"Aardappelzetmeel","url":"https://veevoer.nu/product/aardappelzetmeel/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":18.5,"vem":1084,"vevi":1197,"dve":62,"oeb":-12,"re":95,"rc":22,"zetmeel":658,"suiker":0,"p":1.1,"dsBereik":"15-22%"},{"naam":"Luzerne","url":"https://veevoer.nu/product/luzerne/","categorie":"ruwvoer","diersoorten":[],"ds":90,"vem":671,"vevi":637,"dve":73,"oeb":23,"re":172,"rc":314,"zetmeel":null,"suiker":null,"p":2.9},{"naam":"Voederbieten","url":"https://veevoer.nu/product/voederbieten/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Schapen"],"ds":18,"vem":1056,"vevi":1169,"dve":101,"oeb":-99,"re":78,"rc":59,"zetmeel":null,"suiker":587,"p":2,"dsBereik":"14-22%"},{"naam":"Kuilgras","url":"https://veevoer.nu/product/kuilgras/","categorie":"ruwvoer","diersoorten":["Rundvee","Schapen","Geiten"],"ds":40,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null,"dsBereik":"30-50%"},{"naam":"CCM","url":"https://veevoer.nu/product/ccm/","categorie":"krachtvoer","diersoorten":["Melkvee","Vleesvee","Jongvee","Varkens"],"ds":65,"vem":1207,"vevi":1333,"dve":84,"oeb":-45,"re":97,"rc":24,"zetmeel":675,"suiker":9,"p":3},{"naam":"Snijmais","url":"https://veevoer.nu/product/snijmais/","categorie":"ruwvoer","diersoorten":[],"ds":35,"vem":918,"vevi":946,"dve":47,"oeb":-19,"re":89,"rc":191,"zetmeel":322,"suiker":null,"p":2},{"naam":"Cacaofeed","url":"https://veevoer.nu/product/cacaofeed/","categorie":"bijproduct","diersoorten":["Melkvee","Varkens"],"ds":95,"vem":787,"vevi":774,"dve":122,"oeb":-21,"re":194,"rc":163,"zetmeel":null,"suiker":16,"p":5.4,"leverbaar":false},{"naam":"Tarwestro","url":"https://veevoer.nu/product/tarwestro-2/","categorie":"ruwvoer","diersoorten":[],"ds":90,"vem":418,"vevi":338,"dve":-4,"oeb":-17,"re":44,"rc":419,"zetmeel":null,"suiker":null,"p":null},{"naam":"Kaf","url":"https://veevoer.nu/product/kaf/","categorie":"strooisel","diersoorten":[],"ds":90,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null},{"naam":"Citruspulp biologisch","url":"https://veevoer.nu/product/biologische-citruspulp/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Schapen","Geiten"],"ds":20,"vem":1101,"vevi":1191,"dve":87,"oeb":-86,"re":67,"rc":97,"zetmeel":169,"suiker":297,"p":1.2},{"naam":"Rijstewater","url":"https://veevoer.nu/product/rijstewater-2/","categorie":"bijproduct","diersoorten":[],"ds":14,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":119,"rc":null,"zetmeel":809,"suiker":null,"p":1.59},{"naam":"Tarwegriespellets","url":"https://veevoer.nu/product/tarwegriespellets/","categorie":"krachtvoer","diersoorten":[],"ds":87.5,"vem":964,"vevi":1006,"dve":74.2,"oeb":39.5,"re":195,"rc":90,"zetmeel":249,"suiker":65,"p":8.5},{"naam":"X-beete","url":"https://veevoer.nu/product/x-beete/","categorie":"bijproduct","diersoorten":[],"ds":14.5,"vem":1074,"vevi":1164,"dve":97,"oeb":-64,"re":107,"rc":256,"zetmeel":76,"suiker":89,"p":2.7,"dsBereik":"12-17%"},{"naam":"Gerstestro","url":"https://veevoer.nu/product/gerstestro/","categorie":"ruwvoer","diersoorten":["Melkvee","Jongvee"],"ds":90,"vem":418,"vevi":336,"dve":-4,"oeb":-17,"re":44,"rc":419,"zetmeel":null,"suiker":null,"p":null},{"naam":"Eiwit-Ferm","url":"https://veevoer.nu/product/eiwit-ferm-2/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":36,"vem":1076,"vevi":1167,"dve":138,"oeb":116,"re":305,"rc":16,"zetmeel":22,"suiker":122,"p":3.9},{"naam":"Aardappelstoomschillen","url":"https://veevoer.nu/product/aardappelstoomschillen/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":13,"vem":1089,"vevi":1197,"dve":78,"oeb":-20,"re":106,"rc":42,"zetmeel":430,"suiker":6,"p":2},{"naam":"Maisvoermeel","url":"https://veevoer.nu/product/maisvoermeel/","categorie":"krachtvoer","diersoorten":["Melkvee","Vleesvee","Varkens"],"ds":88,"vem":1234,"vevi":1375,"dve":100,"oeb":-73,"re":90,"rc":30,"zetmeel":592,"suiker":17,"p":4},{"naam":"Sperziebonen","url":"https://veevoer.nu/product/sperziebonen/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":9.8,"vem":932,"vevi":968,"dve":60,"oeb":76,"re":190,"rc":168,"zetmeel":92,"suiker":null,"p":4.1},{"naam":"Vlaslemen","url":"https://veevoer.nu/product/vlaslemen/","categorie":"strooisel","diersoorten":[],"ds":null,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null},{"naam":"Suikermais biologisch","url":"https://veevoer.nu/product/biologische-suikermais/","categorie":"ruwvoer","diersoorten":["Rundvee","Geiten"],"ds":21,"vem":883,"vevi":895,"dve":43,"oeb":-69,"re":36,"rc":237,"zetmeel":15,"suiker":245,"p":2.1,"dsBereik":"20-22%"},{"naam":"Tarwegistconcentraat","url":"https://veevoer.nu/product/tarwegist/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":27,"vem":1180,"vevi":1280,"dve":140,"oeb":56,"re":250,"rc":13,"zetmeel":35,"suiker":175,"p":7.1},{"naam":"Aardappelpulp","url":"https://veevoer.nu/product/aardappelpulp/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":40,"vem":1236,"vevi":1391,"dve":94,"oeb":-125,"re":30,"rc":42,"zetmeel":806,"suiker":0,"p":0.5},{"naam":"Gedroogd wit zaagsel","url":"https://veevoer.nu/product/gedroogd-wit-zaagsel/","categorie":"strooisel","diersoorten":[],"ds":90,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null},{"naam":"Dennenzaagsel","url":"https://veevoer.nu/product/dennenzaagsel/","categorie":"strooisel","diersoorten":[],"ds":90,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null},{"naam":"Populierenzaagsel","url":"https://veevoer.nu/product/populierenzaagsel/","categorie":"strooisel","diersoorten":[],"ds":80,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":null,"rc":null,"zetmeel":null,"suiker":null,"p":null},{"naam":"Aardappelsnippers","url":"https://veevoer.nu/product/aardappelsnippers/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":23.5,"vem":1131,"vevi":1250,"dve":63,"oeb":-52,"re":84,"rc":23,"zetmeel":676,"suiker":20,"p":1.9,"dsBereik":"22-25%"},{"naam":"Appelpulp","url":"https://veevoer.nu/product/appelpulp/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Schapen","Geiten"],"ds":25,"vem":946,"vevi":981,"dve":80,"oeb":-73,"re":69,"rc":292,"zetmeel":205,"suiker":30,"p":0.7},{"naam":"Citruspulp","url":"https://veevoer.nu/product/citruspulp/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Schapen","Geiten"],"ds":20,"vem":1101,"vevi":1191,"dve":87,"oeb":-86,"re":67,"rc":97,"zetmeel":169,"suiker":297,"p":1.2},{"naam":"Doperwten","url":"https://veevoer.nu/product/doperwten/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":16.5,"vem":1023,"vevi":null,"dve":105,"oeb":51,"re":270,"rc":54,"zetmeel":416,"suiker":44,"p":4.7,"dsBereik":"16-17%","leverbaar":false},{"naam":"Wortelpulp","url":"https://veevoer.nu/product/wortelpulp-2/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Geiten"],"ds":14,"vem":1115,"vevi":1216,"dve":80,"oeb":-49,"re":93,"rc":211,"zetmeel":153,"suiker":22,"p":2.3},{"naam":"Vloeibare CCM","url":"https://veevoer.nu/product/vloeibare-ccm/","categorie":"bijproduct","diersoorten":[],"ds":48,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":91,"rc":16,"zetmeel":null,"suiker":100,"p":5.95},{"naam":"Cichoreipulp","url":"https://veevoer.nu/product/cichoreipulp/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":23.5,"vem":1007,"vevi":1080,"dve":102,"oeb":-68,"re":83,"rc":220,"zetmeel":null,"suiker":100,"p":1.5,"dsBereik":"22-25%"},{"naam":"Kaaswei","url":"https://veevoer.nu/product/kaaswei/","categorie":"bijproduct","diersoorten":["Varkens"],"ds":5,"vem":null,"vevi":null,"dve":null,"oeb":null,"re":160,"rc":null,"zetmeel":null,"suiker":null,"p":7.9},{"naam":"Prei","url":"https://veevoer.nu/product/prei/","categorie":"bijproduct","diersoorten":[],"ds":9,"vem":931,"vevi":983,"dve":100,"oeb":-16,"re":181,"rc":156,"zetmeel":null,"suiker":null,"p":2.3,"dsBereik":"8-10%"},{"naam":"Sojacake","url":"https://veevoer.nu/product/sojacake/","categorie":"krachtvoer","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":73,"vem":1198,"vevi":1311,"dve":147,"oeb":26,"re":222,"rc":78,"zetmeel":331,"suiker":10,"p":1.33},{"naam":"Mais - DDGS","url":"https://veevoer.nu/product/mais-ddgs/","categorie":"krachtvoer","diersoorten":[],"ds":90,"vem":1134,"vevi":1217,"dve":168,"oeb":66,"re":282,"rc":null,"zetmeel":null,"suiker":null,"p":7.6},{"naam":"Fruitpuree","url":"https://veevoer.nu/product/fruitpuree/","categorie":"bijproduct","diersoorten":["Melkvee","Jongvee"],"ds":8.5,"vem":1000,"vevi":null,"dve":90,"oeb":null,"re":104,"rc":236,"zetmeel":null,"suiker":null,"p":4,"dsBereik":"7-10%"},{"naam":"Rode wortelpulp","url":"https://veevoer.nu/product/rode-wortelrestant/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Geiten"],"ds":13.5,"vem":1069,"vevi":1164,"dve":74,"oeb":-83,"re":52,"rc":243,"zetmeel":76,"suiker":89,"p":0.88,"dsBereik":"12-15%"},{"naam":"Perspulp","url":"https://veevoer.nu/product/perspulp/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee"],"ds":24,"vem":1060,"vevi":1159,"dve":93,"oeb":-63,"re":82,"rc":159,"zetmeel":9,"suiker":65,"p":0.9},{"naam":"Aardappelen","url":"https://veevoer.nu/product/aardappelen/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Jongvee","Schapen"],"ds":20,"vem":1097,"vevi":1207,"dve":85,"oeb":3,"re":105,"rc":41,"zetmeel":638,"suiker":7,"p":2.5},{"naam":"Appelmelasse","url":"https://veevoer.nu/product/appelmelasse-2/","categorie":"bijproduct","diersoorten":["Rundvee","Kalveren"],"ds":70,"vem":1145,"vevi":null,"dve":null,"oeb":null,"re":32.5,"rc":null,"zetmeel":null,"suiker":610,"p":0.87},{"naam":"Avocadopulp","url":"https://veevoer.nu/product/avocado/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee","Varkens"],"ds":11,"vem":1389,"vevi":1544,"dve":81,"oeb":-27,"re":102,"rc":150,"zetmeel":203,"suiker":19,"p":2.7},{"naam":"Voerbrood","url":"https://veevoer.nu/product/voerbrood/","categorie":"bijproduct","diersoorten":["Melkvee","Vleesvee"],"ds":71,"vem":1279,"vevi":1426,"dve":117,"oeb":-55,"re":133,"rc":12,"zetmeel":515,"suiker":121,"p":2.7}]};
+const BRON_PRODUCTEN = 'https://veevoer.nu/';
+function producten() {
+  const p = S.prijzen && S.prijzen.producten;
+  const r = PRODUCTEN_RESERVE || { producten: [] };
+  return p && Array.isArray(p.producten) && p.producten.length && (p.opgehaald || '') >= (r.opgehaald || '') ? p : r;
+}
+function productBruikbaar(pr) { return [pr.ds, pr.vem, pr.dve, pr.oeb].every(x => Number.isFinite(x)) && pr.ds > 0 && pr.vem > 0; }
+function productVoorMelkvee(pr) { return !Array.isArray(pr.diersoorten) || !pr.diersoorten.length || pr.diersoorten.some(d => /melkvee|rundvee|herkauwer/i.test(d)); }
+// Structuurwaarde staat niet bij de producten; alleen bekende soorten krijgen een waarde (zoals bij de sjablonen), de rest 0.
+const SW_BEKEND = [[/bostel|draf/, 0.6], [/persvezel/, 0.4], [/perspulp|bietenpulp/, 0.7], [/graskuil|kuilgras/, 2.9], [/stro/, 4.3], [/snijmais|maiskuil/, 1.65]];
+function productSw(pr) { const nm = normNaam(pr.naam); const t = SW_BEKEND.find(([re]) => re.test(nm)); return t ? t[1] : 0; }
+function productAlsVoer(pr) {
+  const c = normNaam(pr.categorie || '');
+  const soort = /ruwvoer/.test(c) ? 'ruwvoer' : /kracht/.test(c) && !(pr.ds < 60) ? 'krachtvoer' : 'bijproduct';
+  const opt = x => (Number.isFinite(x) ? x : '');
+  return { naam: pr.naam, soort, ds: pr.ds, vem: pr.vem, dve: pr.dve, oeb: pr.oeb, sw: productSw(pr), zetmeel: opt(pr.zetmeel), suiker: opt(pr.suiker), re: opt(pr.re), p: opt(pr.p),
+    prijs: '', eenheid: 'ton', min: '', max: soort === 'bijproduct' && pr.ds < 40 ? 15 : '', actief: true, bron: 'product', notitie: `Gemiddelde waarden van ${pr.url || BRON_PRODUCTEN}. Vervang ze door de analyse van jullie partij.` };
+}
+let productCache = { sleutel: '', uitkomst: {} }, productRun = 0;
+function productSleutel() {
+  const i = ins();
+  return JSON.stringify([S.bedrijfId, S.voeders.map(v => [v.id, v.prijs, v.eenheid, v.ds, v.vem, v.dve, v.oeb, v.sw, v.re, v.p, v.zetmeel, v.suiker, v.min, v.max, v.actief, v.planType, v.voorraad, v.planDatum]),
+    ['melk', 'vet', 'eiwit', 'koeien', 'lg', 'beweiding', 'dsAuto', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'jeugd', 'extraVem', 'extraDve', 'zsMax', 'suikerMax', 'mestAfvoer', 'mestPrijs', 'mestBeperkend', 'mestN', 'mestP', 'mestVerlies', 'mestMeewegen'].map(k => i[k])]);
+}
+function productUitkomst(pr) {
+  const sl = productSleutel();
+  if (productCache.sleutel !== sl) productCache = { sleutel: sl, uitkomst: {} };
+  return productCache.uitkomst[pr.naam];
+}
+function productRekenen(pr) {
+  const i = ins();
+  const w = waardeInRantsoen(S.voeders, i, num(i.melk, 28), productAlsVoer(pr));
+  productCache.uitkomst[pr.naam] = w;
+  return w;
+}
+function productWaardeTekst(pr, w) {
+  if (!w) return '<span class="small muted">rekent…</span>';
+  if (w.prijs === null) return '<span class="small muted">past niet</span>';
+  return `<span class="${w.boven ? '' : ''}">${w.boven ? 'meer dan ' : 'tot '}${eur(w.prijs * pr.ds * 10, 0)}</span><span class="small muted">per ton product</span>`;
+}
+function openProductoverzicht() {
+  const P = producten();
+  const lijst = (P.producten || []).filter(productBruikbaar);
+  if (!lijst.length) { toast('Het productoverzicht is nog niet beschikbaar.'); return; }
+  const alleenMelkvee = S.productMelkvee !== false;
+  const getoond = lijst.filter(pr => !alleenMelkvee || productVoorMelkvee(pr));
+  const rij = pr => `<button class="moment" data-act="product-open" data-naam="${esc(pr.naam)}">
+      <span class="m-tekst"><b>${esc(pr.naam)}${pr.leverbaar === false ? ' <span class="chip">niet leverbaar</span>' : ''}</b><span class="small muted">DS ${n(pr.ds, pr.ds % 1 ? 1 : 0)}%${pr.dsBereik ? '*' : ''} · VEM ${n(pr.vem)} · DVE ${n(pr.dve)} · OEB ${n(pr.oeb)}</span></span>
+      <span class="m-cijfers" data-waarde="${esc(pr.naam)}">${productWaardeTekst(pr, productUitkomst(pr))}</span></button>`;
+  openBlad(`${bladKop('Productoverzicht')}
+    <p class="small muted">${getoond.length} producten van Van Vulpen (<a href="${esc(P.bron || BRON_PRODUCTEN)}" target="_blank" rel="noopener">veevoer.nu</a>), met gemiddelde voederwaarden. Prijzen staan er niet bij; die vraag je op bij de leverancier. Per product rekent de app uit tot welke prijs het in jullie rantsoen past. ${uitlegKnop('producten', '', 'productoverzicht')}</p>
+    <label class="vink"><input type="checkbox" data-act="product-melkvee"${alleenMelkvee ? ' checked' : ''}> Alleen producten voor melkvee</label>
+    <p class="small" id="product-voortgang"></p>
+    <div class="momenten" id="product-lijst">${getoond.map(rij).join('')}</div>
+    <p class="small muted">* De leverancier geeft een bereik voor de droge stof; de app rekent met het midden. Producten zonder volledige voederwaarden (zoals kuilgras, alleen met bereiken) en strooisels staan er niet in.</p>`);
+  productenBerekenen(getoond);
+}
+function productenBerekenen(lijst) {
+  const run = ++productRun;
+  const open = lijst.filter(pr => !productUitkomst(pr));
+  let k = 0;
+  const stap = () => {
+    if (run !== productRun || !$('#product-lijst')) return;
+    const t0 = performance.now();
+    while (k < open.length && performance.now() - t0 < 40) {
+      const pr = open[k++];
+      const w = productRekenen(pr);
+      const el = document.querySelector(`[data-waarde="${CSS.escape(pr.naam)}"]`);
+      if (el) el.innerHTML = productWaardeTekst(pr, w);
+    }
+    const vg = $('#product-voortgang');
+    if (k < open.length) { if (vg) vg.textContent = `Rekent… ${lijst.length - open.length + k} van ${lijst.length}`; setTimeout(stap, 0); return; }
+    if (vg) vg.textContent = '';
+    // sorteren: eerst wat past (hoogste prijs per ton DS bovenaan), dan de rest op naam
+    const box = $('#product-lijst'); if (!box) return;
+    const knoppen = [...box.children];
+    const w = el => { const u = productCache.uitkomst[el.dataset.naam]; return u && u.prijs !== null ? u.prijs : -1; };
+    knoppen.sort((a, b) => (w(b) - w(a)) || a.dataset.naam.localeCompare(b.dataset.naam)).forEach(el => box.appendChild(el));
+  };
+  setTimeout(stap, 30);
+}
+function openProduct(naam) {
+  const pr = (producten().producten || []).find(x => x.naam === naam); if (!pr) return;
+  const w = productUitkomst(pr) || productRekenen(pr);
+  const A = berekenAlles();
+  const v = productAlsVoer(pr);
+  const vwp = voederwaardePrijs(Object.assign({}, v, { prijs: 0 }), A.P.wur);
+  const kgProd = x => x / (pr.ds / 100);
+  const grenzen = A.O ? bindendeNormen(A.O) : [];
+  let waarde;
+  if (w.prijs === null) {
+    waarde = `<p><b>Past niet in jullie rantsoen</b>, zelfs niet als het gratis is. ${grenzen.length ? `Het advies zit tegen deze grenzen aan: ${zinLijst(grenzen)}. ${esc(pr.naam)} helpt daar niet bij: andere voeders leveren dezelfde energie en hetzelfde eiwit beter passend.` : 'Andere voeders leveren dezelfde energie en hetzelfde eiwit beter passend.'}</p>`;
+  } else {
+    waarde = `<div class="vergelijk-prijs"><div><span class="label">Past tot</span><b>${w.boven ? 'meer dan ' : ''}${eur(w.prijs * pr.ds * 10, 0)} per ton product</b></div><div><span class="label">Per ton droge stof</span><b>${eur(w.prijs * 1000, 0)}</b></div></div>
+      <p>Kost ${esc(pr.naam)} minder dan ${eur(w.prijs * pr.ds * 10, 0)} per ton product (afgeleverd), dan neemt het advies er minstens 1 kg per koe per dag van.${w.kgDsBijPrijs ? ` Net onder die prijs is dat ongeveer ${n(kgProd(w.kgDsBijPrijs), 1)} kg per koe per dag.` : ''} Hoe goedkoper, hoe meer. Gratis zou het advies er ${n(kgProd(w.kgDsGratis), 1)} kg per koe per dag van geven.</p>`;
+  }
+  const cel = (l, x, d, e) => Number.isFinite(x) ? `<span class="cel"><em>${l}</em><b>${n(x, d || 0)}${e || ''}</b></span>` : '';
+  openBlad(`${bladKop(esc(pr.naam))}
+    <div class="analyse">${cel('DS', pr.ds, pr.ds % 1 ? 1 : 0, '%')}${cel('VEM', pr.vem)}${cel('DVE', pr.dve)}${cel('OEB', pr.oeb)}${cel('RE', pr.re)}${cel('Zetm.', pr.zetmeel)}${cel('Suiker', pr.suiker)}${cel('P', pr.p, 1)}</div>
+    <p class="small muted">Per kg droge stof, gemiddelden van de leverancier.${pr.dsBereik ? ` Droge stof volgens de leverancier ${esc(pr.dsBereik)}; de app rekent met het midden (${n(pr.ds, 1)}%).` : ''} Structuurwaarde staat er niet bij; de app rekent met ${n(v.sw, 2)}.</p>
+    ${pr.leverbaar === false ? '<div class="melding let"><span class="stip"></span><div>Bij de leverancier staat dit product nu als niet leverbaar.</div></div>' : ''}
+    <h3>Waarde in jullie rantsoen ${uitlegKnop('producten', '', 'productoverzicht')}</h3>
+    ${waarde}
+    ${vwp > 0 ? `<p class="small muted">Ter vergelijking: volgens de WUR-voederwaardeprijzen is de energie en het eiwit ${eur(vwp, 0)} per ton product waard. De waarde in jullie rantsoen kan anders zijn, omdat die ook afhangt van OEB, structuur, zetmeel en wat jullie al voeren.</p>` : ''}
+    <p class="small muted">Prijzen staan niet online: vraag de dagprijs op bij de leverancier, inclusief transport.${pr.url ? ` <a href="${esc(pr.url)}" target="_blank" rel="noopener">Productpagina</a>` : ''}</p>
+    ${S.kanSchrijven ? `<div class="blad-voet"><button class="btn prim" data-act="product-toevoegen" data-naam="${esc(pr.naam)}">Toevoegen als voer</button><button class="btn" data-act="productoverzicht">Terug naar het overzicht</button></div>` : ''}`);
+}
+function uitlegProducten() {
+  return `${bladKop('Productoverzicht')}
+    <p>Het overzicht toont de voerproducten van Van Vulpen met hun gemiddelde voederwaarden, zoals ze op <a href="${BRON_PRODUCTEN}" target="_blank" rel="noopener">veevoer.nu</a> staan. ${STANDALONE ? 'De app werkt de lijst twee keer per maand bij via jullie website op GitHub.' : ''}</p>
+    <h3>Tot welke prijs past een product?</h3>
+    <p>Prijzen staan er niet bij: die geeft de leverancier op aanvraag (dagprijs). Daarom rekent de app het andersom uit. Per product zet de app het product bij jullie voeders en rekent het goedkoopste rantsoen opnieuw uit, steeds met een andere prijs:</p>
+    <ul>
+      <li>Is het product duur, dan laat het advies het weg.</li>
+      <li>Wordt het goedkoper, dan komt het er op een gegeven moment in.</li>
+    </ul>
+    <p class="som">Prijsgrens = de hoogste prijs waarbij het advies minstens 1 kg product per koe per dag neemt</p>
+    <p>Daarbij rekent de app met jullie normen, jullie voeders en prijzen${mestInstellingen(ins()).meewegen ? ' en de mestafvoer' : ''}. Een product dat goed aanvult wat jullie al voeren (bijvoorbeeld energie met een negatieve OEB als de OEB tegen de grens zit), is in jullie rantsoen meer waard dan de WUR-voederwaardeprijs zegt. Een product dat hetzelfde levert als wat jullie al hebben, minder.</p>
+    <p>Kost het product bij de leverancier minder dan de prijsgrens (inclusief vracht), dan loont het om het te proberen. Voeg het dan toe als voer met de echte prijs; het advies neemt het meteen mee.</p>
+    <h3>Goed om te weten</h3>
+    <ul>
+      <li>Het zijn gemiddelde waarden van de leverancier. Een partij kan flink afwijken; vraag de analyse van de levering.</li>
+      <li>Van Vulpen vermeldt niet of de VEM al volgens het nieuwe systeem (VEM2022) is. De app rekent met VEM2022; het verschil is meestal een paar procent.</li>
+      <li>De structuurwaarde staat er niet bij. De app rekent met 0, behalve bij bekende producten (zoals bierbostel 0,6 en perspulp 0,7).</li>
+      <li>Vochtrijke producten hebben grenzen in de praktijk: opslag, houdbaarheid, smakelijkheid. Bij het toevoegen zet de app voor vochtrijke bijproducten een maximum van 15 kg per koe per dag; pas dat aan naar wat bij jullie past.</li>
+    </ul>`;
+}
+
+// ---------- Mengwagen: gevoerd ----------
+function gevoerdRecords() { return S.gevoerd.filter(r => r.bedrijf === S.bedrijfId); }
+function gevoerdId(soort, datum) { return `${S.bedrijfId}~${soort === 'dag' ? 'd' : 'p'}~${datum}`; }
+function bewaarGevoerd(r) {
+  const k = S.gevoerd.findIndex(x => x.id === r.id);
+  if (k >= 0) S.gevoerd[k] = r; else S.gevoerd.push(r);
+  const d = JSON.parse(JSON.stringify(r)); delete d.id;
+  return schrijf('gevoerd/' + r.id, d);
+}
+function verwijderGevoerd(id) { S.gevoerd = S.gevoerd.filter(r => r.id !== id); return verwijder('gevoerd/' + id); }
+function gevoerdBeeld(A, datum) {
+  const rec = gevoerdOp(gevoerdRecords(), datum);
+  if (!rec) return null;
+  const g = gevoerdPerKoe(S.voeders, rec);
+  const V = gevoerdeVoeders(S.voeders, g.perKoe);
+  const G = huidigRantsoen(V, A.i);
+  return { rec, g, V, G, e: economie(G, A.i, A.P.melk) };
+}
+function viewGevoerd(A) {
+  const recs = gevoerdRecords();
+  const knoppen = S.kanSchrijven ? `<div class="knoppen"><button class="btn" data-act="gevoerd-form">${recs.length ? 'Gevoerd wijzigen' : 'Gevoerd invullen'}</button><button class="btn" data-act="csv-import">CSV inlezen</button></div>` : '';
+  if (!recs.length) return `<p class="small muted">Vul in wat er per dag voor de melkkoeien in de mengwagen gaat. Die hoeveelheden blijven elke dag gelden, tot jullie ze veranderen. De app vergelijkt het met het huidige rantsoen en het advies, en rekent uit wat een afwijking kost. Een export van een weegsysteem (zoals FeedLink) kun je ook inlezen.</p>${knoppen}`;
+  const vandaag = vandaagISO();
+  const datum = S.gevoerdDatum || vandaag;
+  const kop = `<div class="gevoerd-kop"><label for="gv-datum">Dag</label><input type="date" id="gv-datum" value="${datum}" max="${vandaag}">${datum !== vandaag ? '<button class="btn klein" data-act="gv-vandaag">Vandaag</button>' : ''}</div>`;
+  const B = gevoerdBeeld(A, datum);
+  const eerste = recs.map(r => r.datum).sort()[0];
+  if (!B) return `${kop}<p class="muted">Voor ${datumNL(datum)} is nog niets ingevuld. De eerste invoer is van ${datumNL(eerste)}.</p>${knoppen}`;
+  const { rec, g, G, e } = B;
+  const i = A.i, O = A.O, koeien = g.koeien;
+  const bron = rec.soort === 'dag' ? `ingelezen uit ${esc(rec.bestand || 'een CSV-bestand')}` : `ingevuld, geldt sinds ${datumNL(rec.datum)}`;
+  let rijen = '', grootste = null;
+  gesorteerd().forEach(v => {
+    const min = v.soort === 'mineraal';
+    const gv = g.perKoe[v.id], h = num(v.huidig, 0);
+    const adv = O ? (min ? h : kgProduct(v, O.kgDs[v.id] || 0)) : null;
+    if (gv === undefined && !h && !(adv > 0.05)) return;
+    const f = x => x === null || x === undefined ? '–' : min ? n(x) + ' g' : n(x, 1);
+    let cls = '', notitie = '';
+    if (gv !== undefined) {
+      const afw = gv - h, drempel = min ? 10 : Math.max(0.3, h * 0.05);
+      if (Math.abs(afw) >= drempel) {
+        cls = ' class="afwijking"';
+        notitie = `${min ? n(Math.abs(afw)) + ' g' : n(Math.abs(afw), 1) + ' kg'} ${afw > 0 ? 'meer' : 'minder'} dan huidig`;
+        const euro = (min ? afw / 1000 * num(v.prijs, 0) : afw * num(v.ds, 0) / 100 * prijsPerKgDs(v)) * koeien;
+        if (!grootste || Math.abs(euro) > Math.abs(grootste.euro)) grootste = { v, afw, euro, min };
+      }
+    }
+    rijen += `<tr${cls}><td class="naam">${esc(v.naam)}${gv === undefined ? '<small>niet in mengwagen</small>' : notitie ? `<small>${notitie}</small>` : ''}</td><td class="n"><b>${gv === undefined ? '–' : f(gv)}</b></td><td class="n">${f(h)}</td><td class="n adv">${O ? f(adv) : '–'}</td></tr>`;
+  });
+  const dKost = (e.kosten - A.eH.kosten) * koeien;
+  const krit = G.problemen.filter(p => p.ernst === 'kritiek');
+  // verloop 30 dagen
+  const kosten = [], dsReeks = [];
+  for (let k = 29; k >= 0; k--) {
+    const d = datumPlus(datum, -k);
+    const r = gevoerdOp(recs, d); if (!r) continue;
+    const gg = gevoerdPerKoe(S.voeders, r);
+    const T = huidigRantsoen(gevoerdeVoeders(S.voeders, gg.perKoe), i).T;
+    kosten.push({ d, v: T.kosten }); dsReeks.push({ d, v: T.ds });
+  }
+  const periodes = recs.filter(r => r.soort === 'periode').sort((a, b) => (a.datum < b.datum ? 1 : -1));
+  const dagen = recs.filter(r => r.soort === 'dag').map(r => r.datum).sort();
+  return `${kop}
+    <p class="small muted">${datumNL(datum)}: ${bron}. ${n(koeien)} melkkoeien, ${n(g.totaal)} kg in de mengwagen${g.rest > 0 ? `, ${n(g.rest)} kg restvoer (${n(g.rest / g.totaal * 100, 1)}%)` : ''}.</p>
+    <div class="tabel-wrap"><table class="rt">
+      <thead><tr><th>Per koe per dag</th><th>Gevoerd</th><th>Huidig</th><th class="adv">Advies</th></tr></thead>
+      <tbody>${rijen}</tbody>
+      <tfoot><tr><td>Droge stof</td><td class="n"><b>${n(G.T.ds, 1)} kg</b></td><td class="n">${n(A.H.T.ds, 1)} kg</td><td class="n adv">${O ? n(O.T.ds, 1) + ' kg' : '–'}</td></tr>
+      <tr><td>Voerkosten</td><td class="n"><b>${eur(e.kosten)}</b></td><td class="n">${eur(A.eH.kosten)}</td><td class="n adv">${A.eO ? eur(A.eO.kosten) : '–'}</td></tr></tfoot>
+    </table></div>
+    <p class="small muted">kg product per koe per dag; mineralen in gram. Gemarkeerd met een streep: meer dan 5% (minimaal 0,3 kg) anders dan het huidige rantsoen.</p>
+    ${Math.abs(dKost) >= 1 ? `<p>Het gevoerde rantsoen kost <b>${eur(Math.abs(dKost), 0)} per dag ${dKost > 0 ? 'meer' : 'minder'}</b> dan het huidige rantsoen (${eur(Math.abs(e.kosten - A.eH.kosten))} per koe).${grootste ? ` Grootste afwijking: ${esc(grootste.v.naam)}, ${grootste.min ? n(Math.abs(grootste.afw)) + ' g' : n(Math.abs(grootste.afw), 1) + ' kg'} per koe ${grootste.afw > 0 ? 'meer' : 'minder'} dan gepland (${eur(Math.abs(grootste.euro), 0)} per dag).` : ''}</p>` : '<p>Het gevoerde rantsoen kost ongeveer hetzelfde als het huidige rantsoen.</p>'}
+    <dl class="kv">
+      <dt>Droge stof gevoerd per koe</dt><dd>${n(G.T.ds, 1)} kg <span class="muted small">· app schat ${n(G.B.dsDoel, 1)} kg</span></dd>
+      <dt>Energie (VEM)</dt><dd>${n(G.T.vem / G.B.vem * 100)}%</dd>
+      <dt>Eiwit (DVE)</dt><dd>${n(G.T.dve / G.B.dve * 100)}%</dd>
+      <dt>Pensbalans (OEB)</dt><dd>${n(G.T.oeb)} g</dd>
+      <dt>Melkgeld min voerkosten</dt><dd>${eur(e.saldo)} per koe</dd>
+    </dl>
+    ${krit.length ? `<div class="melding kritiek"><span class="stip"></span><div>Volgens de normen schiet het gevoerde rantsoen tekort: ${zinLijst(krit.map(p => esc(klein(p.tekst))))}.</div></div>` : ''}
+    ${kosten.length >= 2 ? `<div class="sparks">${spark(kosten, 'Voerkosten per koe, laatste 30 dagen', 2)}${spark(dsReeks, 'Droge stof per koe, kg', 1)}</div>` : ''}
+    ${S.bevestig === 'gv-gemiddeld' ? `<div class="melding let"><span class="stip"></span><div>Het gemiddelde van de 7 dagen tot en met ${datumNL(datum)} wordt het huidige rantsoen (alleen de voeders die via de mengwagen gaan). Het rantsoen van nu wordt eerst bewaard in de geschiedenis.<div class="knoppen"><button class="btn klein prim" data-act="gv-gemiddeld-ja">Ja, overnemen</button><button class="btn klein" data-act="gv-gemiddeld-nee">Annuleren</button></div></div></div>` : ''}
+    ${knoppen}
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn klein" data-act="gv-gemiddeld-vraag">Gemiddelde van 7 dagen wordt het huidige rantsoen</button></div>' : ''}
+    <details class="tabelweergave"><summary>Wijzigingen (${periodes.length}${dagen.length ? ` + ${dagen.length} ingelezen dagen` : ''})</summary>
+      <div class="momenten">${periodes.map(r => `<button class="moment" data-act="gevoerd-form" data-datum="${esc(r.datum)}"><span class="m-tekst"><b>Vanaf ${esc(datumNL(r.datum))}</b><span class="small muted">${n(num(r.koeien, 0))} koeien · ${n(Object.values(r.voer || {}).reduce((t, x) => t + num(x, 0), 0))} kg per dag</span></span><span class="m-cijfers"><span class="small muted">wijzigen</span></span></button>`).join('')}</div>
+      ${dagen.length ? `<p class="small">Ingelezen: ${dagen.length} dagen, van ${datumNL(dagen[0])} tot ${datumNL(dagen[dagen.length - 1])}.</p>${S.kanSchrijven ? (S.bevestig === 'gv-dagen-weg' ? `<div class="melding kritiek"><span class="stip"></span><div>Alle ${dagen.length} ingelezen dagen verwijderen? Daarna gelden weer de ingevulde hoeveelheden.<div class="knoppen"><button class="btn klein gevaar" data-act="gv-dagen-weg-ja">Ja, verwijder</button><button class="btn klein" data-act="gv-dagen-weg-nee">Annuleren</button></div></div></div>` : '<button class="btn klein gevaar" data-act="gv-dagen-weg-vraag">Ingelezen dagen verwijderen</button>') : ''}` : ''}
+    </details>`;
+}
+function openGevoerdForm(datum) {
+  const i = ins(), recs = gevoerdRecords(), A = berekenAlles();
+  const bestaand = datum ? recs.find(r => r.soort === 'periode' && r.datum === datum) : null;
+  const basis = bestaand || gevoerdOp(recs, vandaagISO()) || null;
+  const vanaf = bestaand ? bestaand.datum : vandaagISO();
+  const koeien = basis ? basis.koeien : num(i.koeien, 0);
+  const vs = gesorteerd();
+  const veld = v => `<div class="veld" data-veld="gv-${esc(v.id)}"><label for="gv-${esc(v.id)}">${esc(v.naam)}</label><input id="gv-${esc(v.id)}" data-voer="${esc(v.id)}" inputmode="decimal" autocomplete="off" value="${esc(invoer(basis && basis.voer && ingevuld(basis.voer[v.id]) ? basis.voer[v.id] : ''))}" placeholder="niet in mengwagen"><span class="hint">kg per dag</span></div>`;
+  openBlad(`${bladKop(bestaand ? 'Gevoerd wijzigen' : 'Gevoerd invullen')}
+    <p class="small muted">Wat er per dag voor de melkkoeien in de mengwagen gaat: alle ladingen van een dag samen, zonder droge koeien en jongvee. Deze hoeveelheden gelden vanaf de gekozen datum elke dag, tot je ze verandert. Laat een voer leeg als het niet via de mengwagen gaat (bijvoorbeeld krachtvoer uit de box); dan rekent de app daarvoor met het huidige rantsoen. ${uitlegKnop('mengwagen', '', 'mengwagen')}</p>
+    <form class="form" id="gevoerdform" novalidate>
+      <div class="velden">
+        <div class="veld" data-veld="vanaf"><label for="gv-vanaf">Geldt vanaf</label><input id="gv-vanaf" name="vanaf" type="date" value="${vanaf}"></div>
+        <div class="veld" data-veld="koeien"><label for="gv-koeien">Melkkoeien in de lading</label><input id="gv-koeien" name="koeien" inputmode="decimal" autocomplete="off" value="${esc(invoer(koeien))}"></div>
+      </div>
+      <div class="knoppen"><button type="button" class="btn klein" data-gv-vul="huidig">Overnemen uit huidig rantsoen</button>${A.O ? '<button type="button" class="btn klein" data-gv-vul="advies">Overnemen uit advies</button>' : ''}</div>
+      <fieldset><legend>Per dag in de mengwagen</legend><div class="velden">${vs.map(veld).join('')}</div></fieldset>
+      <div class="velden"><div class="veld vol" data-veld="rest"><label for="gv-rest">Restvoer per dag</label><input id="gv-rest" name="rest" inputmode="decimal" autocomplete="off" value="${esc(invoer(basis && num(basis.rest, 0) ? basis.rest : ''))}" placeholder="0"><span class="hint">kg dat aan het voerhek overblijft; mag leeg</span></div></div>
+      <div class="livetotaal" id="gv-live"></div>
+      <div id="gv-weg-plek"></div>
+      <div class="blad-voet"><button type="submit" class="btn prim">Opslaan</button><button type="button" class="btn" data-act="sluit">Annuleren</button>${bestaand ? `<button type="button" class="btn gevaar" data-act="gv-weg-vraag" data-id="${esc(bestaand.id)}">Verwijderen</button>` : ''}</div>
+    </form>`, b => {
+    const f = b.querySelector('#gevoerdform');
+    const lees = () => {
+      const voer = {};
+      f.querySelectorAll('input[data-voer]').forEach(el => { const r = el.value.trim(); if (r !== '') voer[el.dataset.voer] = num(r, NaN); });
+      return { koeien: num(f.elements.koeien.value, NaN), rest: f.elements.rest.value.trim() === '' ? 0 : num(f.elements.rest.value, NaN), voer, datum: f.elements.vanaf.value };
+    };
+    const live = () => {
+      const r = lees();
+      if (!(r.koeien > 0) || Object.values(r.voer).some(x => !Number.isFinite(x))) { b.querySelector('#gv-live').innerHTML = ''; return; }
+      const g = gevoerdPerKoe(S.voeders, r);
+      const G = huidigRantsoen(gevoerdeVoeders(S.voeders, g.perKoe), ins());
+      b.querySelector('#gv-live').innerHTML = `<div>Totaal per dag<b>${n(g.totaal)} kg</b></div><div>Droge stof per koe<b>${n(G.T.ds, 1)} kg</b></div><div>Voerkosten per koe<b>${eur(G.T.kosten)}</b></div>`;
+    };
+    live(); f.addEventListener('input', live);
+    b.addEventListener('click', ev => {
+      const knop = ev.target.closest('[data-gv-vul]'); if (!knop) return;
+      const k = num(f.elements.koeien.value, 0);
+      S.voeders.forEach(v => {
+        const el = f.querySelector(`input[data-voer="${CSS.escape(v.id)}"]`); if (!el) return;
+        const perKoe = v.soort === 'mineraal' ? num(v.huidig, 0) / 1000 : knop.dataset.gvVul === 'advies' && A.O ? kgProduct(v, A.O.kgDs[v.id] || 0) : num(v.huidig, 0);
+        const tot = perKoe * k;
+        el.value = tot > 0 ? invoer(tot >= 100 ? Math.round(tot / 10) * 10 : Math.round(tot * 10) / 10) : (el.value.trim() === '' ? '' : '0');
+      });
+      live();
+    });
+    f.addEventListener('submit', ev => {
+      ev.preventDefault();
+      f.querySelectorAll('.veld.fout').forEach(x => { x.classList.remove('fout'); const t = x.querySelector('.fouttekst'); if (t) t.remove(); });
+      const fout = (k, t) => { const v = f.querySelector(`[data-veld="${CSS.escape(k)}"]`); if (v) { v.classList.add('fout'); v.insertAdjacentHTML('beforeend', `<span class="fouttekst">${t}</span>`); } };
+      const r = lees();
+      let ok = true;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(r.datum)) { fout('vanaf', 'Kies een datum.'); ok = false; }
+      if (!(r.koeien > 0)) { fout('koeien', 'Vul het aantal melkkoeien in.'); ok = false; }
+      Object.entries(r.voer).forEach(([id, x]) => { if (!(x >= 0)) { fout('gv-' + id, 'Vul een getal in of laat leeg.'); ok = false; } });
+      if (!Object.keys(r.voer).length) { fout('koeien', 'Vul bij minstens één voer de kilo’s in.'); ok = false; }
+      if (!(r.rest >= 0)) { fout('rest', 'Vul een getal in of laat leeg.'); ok = false; }
+      if (!ok) return;
+      const rec = { id: gevoerdId('periode', r.datum), bedrijf: S.bedrijfId, soort: 'periode', datum: r.datum, koeien: r.koeien, rest: r.rest, voer: r.voer, bron: 'hand', gewijzigd: new Date().toISOString() };
+      if (bestaand && bestaand.id !== rec.id) verwijderGevoerd(bestaand.id).catch(() => {});
+      bewaarGevoerd(rec).then(() => toast('Opgeslagen; geldt vanaf ' + datumNL(r.datum, true))).catch(() => {});
+      S.gevoerdDatum = null; S.mwWeergave = 'gevoerd';
+      sluitBlad(); render();
+    });
+  });
+}
+async function gevoerdGemiddeldOvernemen() {
+  S.bevestig = null;
+  const datum = S.gevoerdDatum || vandaagISO();
+  const gem = gevoerdGemiddeld(S.voeders, gevoerdRecords(), datum, 7);
+  if (!gem.dagen) { toast('Geen gegevens in deze 7 dagen'); render(); return; }
+  try { await bewaarMoment(rantsoenMoment('', 'voor-mengwagen')); } catch (e) { /* melding al getoond */ }
+  const wijzig = [];
+  S.voeders.forEach(v => {
+    const x = gem.perKoe[v.id]; if (x === undefined) return;
+    const nieuw = v.soort === 'mineraal' ? Math.round(x) : Math.round(x * 10) / 10;
+    if (nieuw !== num(v.huidig, 0)) wijzig.push(Object.assign({}, v, { huidig: nieuw }));
+  });
+  for (const v of wijzig) { try { await bewaarVoer(v); } catch (e) { break; } }
+  toast(`Gemiddelde van ${gem.dagen} dagen is nu het huidige rantsoen`);
+  render();
+}
+function uitlegMengwagen() {
+  const A = berekenAlles();
+  const datum = S.gevoerdDatum || vandaagISO();
+  const B = gevoerdBeeld(A, datum);
+  let voorbeeld = '';
+  if (B) {
+    const v = gesorteerd().find(x => B.g.perKoe[x.id] !== undefined && x.soort !== 'mineraal');
+    if (v) {
+      const kg = num(B.rec.voer[v.id], 0);
+      voorbeeld = `<p class="som">${esc(v.naam)}: ${n(kg)} kg${B.g.rest > 0 ? ` × (1 − ${n(B.g.rest)} ÷ ${n(B.g.totaal)} kg restvoer)` : ''} ÷ ${n(B.g.koeien)} koeien = <b>${n(B.g.perKoe[v.id], 1)} kg</b> per koe per dag</p>`;
+    }
+  }
+  return `${bladKop('Mengwagen')}
+    <p><b>Laden</b> laat zien wat er volgens het advies (of het huidige rantsoen) per dag in de mengwagen moet: kg per koe × aantal melkkoeien.</p>
+    <p><b>Gevoerd</b> is wat er werkelijk in de mengwagen ging. Dat vul je één keer in, met de datum vanaf wanneer het geldt. Die hoeveelheden blijven elke dag gelden, tot je ze verandert. Een wijziging geldt vanaf de nieuwe datum; de dagen daarvoor houden de oude hoeveelheden. Ingelezen dagen uit een CSV-bestand (bijvoorbeeld van FeedLink) gaan voor op wat je hebt ingevuld.</p>
+    <h3>Zo rekent de app</h3>
+    <p class="som">kg per koe = kg in de mengwagen × (1 − restvoer ÷ totaal) ÷ aantal melkkoeien</p>
+    ${voorbeeld}
+    <p>Het restvoer trekt de app naar verhouding af van elk voer: de app neemt aan dat wat overblijft dezelfde samenstelling heeft als de mengwagen. Een voer dat je leeg laat, gaat niet via de mengwagen (bijvoorbeeld krachtvoer uit de box); daarvoor rekent de app met de hoeveelheid uit het huidige rantsoen.</p>
+    <h3>Wat de app vergelijkt</h3>
+    <ul>
+      <li><b>Gevoerd tegen huidig:</b> klopt het laden met wat jullie van plan zijn? Een voer wordt gemarkeerd als het meer dan 5% (en minimaal 0,3 kg per koe) afwijkt. De kosten van een afwijking: kg per koe × prijs per kg × aantal koeien.</li>
+      <li><b>Gevoerd tegen advies:</b> hoe ver zit het werkelijke rantsoen van het goedkoopste rantsoen.</li>
+      <li><b>Normen:</b> energie, eiwit en OEB van wat er werkelijk gevoerd is.</li>
+      <li><b>Droge-stofopname:</b> de werkelijke opname per koe, naast de schatting waar het advies mee rekent. Zit die structureel anders, pas dan bij Bedrijf de droge-stofopname aan; dan wordt het advies beter.</li>
+    </ul>
+    <h3>Gemiddelde overnemen</h3>
+    <p>"Gemiddelde van 7 dagen wordt het huidige rantsoen" zet het gemiddelde per koe van de laatste 7 dagen met gegevens als huidig rantsoen, voor de voeders die via de mengwagen gaan. Het oude huidige rantsoen bewaart de app eerst in de geschiedenis.</p>`;
+}
+// ---------- CSV inlezen ----------
+let csvStaat = null;
+function openCsvImport() {
+  csvStaat = null;
+  openBlad(`${bladKop('CSV inlezen')}
+    <p class="small muted">Lees een export in van een weegsysteem, zoals FeedLink. De app telt per dag op hoeveel kg van elk voer er voor de melkkoeien in de mengwagen is geladen. Ingelezen dagen gaan voor op de ingevulde hoeveelheden. ${uitlegKnop('csv', '', 'CSV inlezen')}</p>
+    <div class="knoppen"><label class="btn prim" for="csv-input">Bestand kiezen</label><input type="file" id="csv-input" accept=".csv,.txt,text/csv,text/plain" class="verborgen"></div>
+    <div id="csv-inhoud"></div>`);
+}
+async function csvBestand(file) {
+  if (!file) return;
+  let tekst = '';
+  try { tekst = await file.text(); } catch (e) { toast('Het bestand kan niet gelezen worden.'); return; }
+  const P = parseCsv(tekst);
+  if (P.rows.length < 2 || P.rows[0].length < 3) { toast('Dit lijkt geen CSV-bestand met kolommen.'); return; }
+  const b = huidigBedrijf();
+  const opgeslagen = (b && b.csvKoppeling) || {};
+  const kop = P.rows[0];
+  const isKop = kop.filter(c => c && !Number.isFinite(parseGewicht(c)) && !parseDatum(c)).length >= kop.length / 2;
+  const header = isKop ? kop : kop.map((_, k) => 'Kolom ' + (k + 1));
+  const rows = isKop ? P.rows.slice(1) : P.rows;
+  const zoek = (re, pred) => { let k = header.findIndex((h, j) => re.test(h) && (!pred || pred(j))); return k; };
+  const naamIdx = nm => nm ? header.indexOf(nm) : -1;
+  const getalKolom = j => rows.slice(0, 20).filter(r => Number.isFinite(parseGewicht(r[j]))).length >= Math.min(5, rows.length) * 0.8;
+  const datumKolom = j => rows.slice(0, 20).filter(r => parseDatum(r[j])).length >= Math.min(5, rows.length) * 0.8;
+  const cfg = {
+    datum: naamIdx(opgeslagen.datum) >= 0 ? naamIdx(opgeslagen.datum) : zoek(/datum|date|dag|day|tijd|time/i, datumKolom),
+    voer: naamIdx(opgeslagen.voer) >= 0 ? naamIdx(opgeslagen.voer) : zoek(/ingredi|product|voer|feed|component|item|naam|name/i),
+    kg: naamIdx(opgeslagen.kg) >= 0 ? naamIdx(opgeslagen.kg) : zoek(/kg|gewicht|weight|geladen|loaded|amount|actual|hoeveel/i, getalKolom),
+    eenheid: opgeslagen.eenheid || (header.some(h => /\blb|pound/i.test(h)) ? 'lb' : 'kg'),
+    filters: [0, 1].map(k => { const f = (opgeslagen.filters || [])[k]; return f && naamIdx(f.kolom) >= 0 ? { kolom: naamIdx(f.kolom), waarde: f.waarde } : { kolom: -1, waarde: '' }; }),
+    koeien: (gevoerdOp(gevoerdRecords(), vandaagISO()) || {}).koeien || num(ins().koeien, 0),
+  };
+  if (cfg.datum < 0) cfg.datum = header.findIndex((_, j) => datumKolom(j));
+  if (cfg.kg < 0) cfg.kg = header.findIndex((_, j) => j !== cfg.datum && getalKolom(j));
+  cfg.notatie = opgeslagen.notatie || raadDatumNotatie(rows.slice(0, 200).map(r => r[cfg.datum]));
+  if (cfg.filters[0].kolom < 0) { const k = zoek(/recept|recipe|groep|group|herd|koppel|pen|rantsoen|ration|lading/i); if (k >= 0) cfg.filters[0].kolom = k; }
+  csvStaat = { bestand: file.name, header, rows, delim: P.delim, cfg, koppeling: Object.assign({}, opgeslagen.producten || {}) };
+  csvRender(true);
+}
+function csvUniek(kolom, rows) {
+  const t = {}; rows.forEach(r => { const w = r[kolom]; if (w !== undefined && w !== '') t[w] = (t[w] || 0) + 1; });
+  return Object.keys(t).sort((a, b) => t[b] - t[a]).slice(0, 60);
+}
+function csvGefilterd() {
+  const c = csvStaat.cfg;
+  return csvStaat.rows.filter(r => !c.filters.some(f => f.kolom >= 0 && f.waarde !== '' && String(r[f.kolom] || '') !== f.waarde));
+}
+function csvRender(alles) {
+  const el = $('#csv-inhoud'); if (!el || !csvStaat) return;
+  const { header, rows, cfg } = csvStaat;
+  const opties = (sel, leeg) => (leeg ? `<option value="-1"${sel < 0 ? ' selected' : ''}>${leeg}</option>` : '') + header.map((h, k) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(h || 'Kolom ' + (k + 1))}</option>`).join('');
+  // productkoppeling: automatisch raden waar nog niets is gekozen
+  const namen = cfg.voer >= 0 ? csvUniek(cfg.voer, csvGefilterd()) : [];
+  namen.forEach(nm => {
+    if (csvStaat.koppeling[nm] !== undefined) return;
+    const a = normNaam(nm);
+    const v = S.voeders.find(x => normNaam(x.naam) === a) || S.voeders.find(x => { const b = normNaam(x.naam); return a && b && (b.includes(a) || a.includes(b.split(' ')[0])); });
+    csvStaat.koppeling[nm] = v ? v.id : '';
+  });
+  const koppel = namen.map(nm => `<div class="veld"><label>${esc(nm)}</label><select data-csv-product="${esc(nm)}"><option value="">Overslaan</option>${gesorteerd().map(v => `<option value="${esc(v.id)}"${csvStaat.koppeling[nm] === v.id ? ' selected' : ''}>${esc(v.naam)}</option>`).join('')}</select></div>`).join('');
+  const R = csvNaarDagen(rows, cfg, csvStaat.koppeling);
+  const dagen = Object.keys(R.dagen).sort();
+  const nietG = Object.entries(R.nietGekoppeld);
+  const resultaat = `<h3>Resultaat</h3>
+    ${dagen.length ? `<p><b>${dagen.length} ${dagen.length === 1 ? 'dag' : 'dagen'}</b>, van ${datumNL(dagen[0])} tot ${datumNL(dagen[dagen.length - 1])}.</p>
+      <div class="tabel-wrap"><table class="rt uitleg-tabel"><thead><tr><th>Dag</th><th>Totaal</th><th>Per koe</th></tr></thead><tbody>${dagen.slice(-7).map(d => { const t = Object.values(R.dagen[d]).reduce((a, x) => a + x, 0); return `<tr><td>${datumNL(d, true)}</td><td class="n">${n(t)} kg</td><td class="n">${cfg.koeien > 0 ? n(t / cfg.koeien, 1) + ' kg' : '–'}</td></tr>`; }).join('')}</tbody></table></div>
+      ${dagen.length > 7 ? `<p class="small muted">De laatste 7 dagen; alle ${dagen.length} worden ingelezen.</p>` : ''}` : '<p class="muted">Nog geen dagen gevonden. Kies hierboven de juiste kolommen en koppel de producten aan jullie voeders.</p>'}
+    <p class="small muted">${R.gebruikt} regels gebruikt${R.gefilterd ? `, ${R.gefilterd} weggefilterd` : ''}${R.fout ? `, ${R.fout} zonder geldige datum, voer of gewicht` : ''}.${nietG.length ? ` Niet gekoppeld (overgeslagen): ${nietG.map(([nm, kg]) => `${esc(nm)} ${n(kg)} kg`).join(', ')}.` : ''}</p>
+    ${dagen.length ? `<div class="blad-voet"><button class="btn prim" data-act="csv-inlezen">${dagen.length} ${dagen.length === 1 ? 'dag' : 'dagen'} inlezen</button><button class="btn" data-act="sluit">Annuleren</button></div>` : ''}`;
+  if (!alles) { const k = $('#csv-koppeling'), r = $('#csv-resultaat'); if (k) k.innerHTML = koppel ? `<h3>Producten koppelen aan jullie voeders</h3><div class="velden">${koppel}</div>` : ''; if (r) r.innerHTML = resultaat; return; }
+  const filter = k => { const f = cfg.filters[k]; return `<div class="veld"><label for="csv-f${k}">Alleen regels waar</label><select id="csv-f${k}" data-csv="f${k}">${opties(f.kolom, 'geen filter')}</select></div>
+    ${f.kolom >= 0 ? `<div class="veld"><label for="csv-fw${k}">gelijk is aan</label><select id="csv-fw${k}" data-csv="fw${k}"><option value="">(alles)</option>${csvUniek(f.kolom, rows).map(w => `<option${w === f.waarde ? ' selected' : ''}>${esc(w)}</option>`).join('')}</select></div>` : '<div></div>'}`; };
+  el.innerHTML = `<p class="small">${esc(csvStaat.bestand)}: ${rows.length} regels, ${header.length} kolommen (scheidingsteken ${csvStaat.delim === '\t' ? 'tab' : csvStaat.delim}).</p>
+    <div class="tabel-wrap"><table class="rt uitleg-tabel csv-voorbeeld"><thead><tr>${header.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, 3).map(r => `<tr>${header.map((_, k) => `<td>${esc(r[k] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <form class="form" id="csvform" novalidate>
+      <fieldset><legend>Welke kolom is wat?</legend><div class="velden">
+        <div class="veld"><label for="csv-datum">Datum</label><select id="csv-datum" data-csv="datum">${opties(cfg.datum, 'kies')}</select></div>
+        <div class="veld"><label for="csv-notatie">Datumnotatie</label><select id="csv-notatie" data-csv="notatie"><option value="dmj"${cfg.notatie === 'dmj' ? ' selected' : ''}>dag-maand-jaar</option><option value="mdj"${cfg.notatie === 'mdj' ? ' selected' : ''}>maand/dag/jaar (VS)</option><option value="jmd"${cfg.notatie === 'jmd' ? ' selected' : ''}>jaar-maand-dag</option></select></div>
+        <div class="veld"><label for="csv-voer">Voer of ingrediënt</label><select id="csv-voer" data-csv="voer">${opties(cfg.voer, 'kies')}</select></div>
+        <div class="veld"><label for="csv-kg">Gewicht</label><select id="csv-kg" data-csv="kg">${opties(cfg.kg, 'kies')}</select></div>
+        <div class="veld"><label for="csv-eenheid">Eenheid</label><select id="csv-eenheid" data-csv="eenheid"><option value="kg"${cfg.eenheid === 'kg' ? ' selected' : ''}>kg</option><option value="lb"${cfg.eenheid === 'lb' ? ' selected' : ''}>pond (lb)</option></select></div>
+        <div class="veld"><label for="csv-koeien">Melkkoeien per dag</label><input id="csv-koeien" data-csv="koeien" inputmode="decimal" value="${esc(invoer(cfg.koeien))}"></div>
+      </div></fieldset>
+      <fieldset><legend>Alleen de melkkoeien</legend>
+        <p class="small muted">Staan in het bestand ook ladingen voor droge koeien of jongvee, of ook het uitladen? Kies dan de kolom met de groep (of het recept) en de waarde voor de melkkoeien. Met het tweede filter kies je bijvoorbeeld alleen het laden.</p>
+        <div class="velden">${filter(0)}${filter(1)}</div></fieldset>
+    </form>
+    <div id="csv-koppeling">${koppel ? `<h3>Producten koppelen aan jullie voeders</h3><div class="velden">${koppel}</div>` : ''}</div>
+    <div id="csv-resultaat">${resultaat}</div>`;
+}
+function csvWijzig(el) {
+  if (!csvStaat) return;
+  const c = csvStaat.cfg, k = el.dataset.csv;
+  if (el.dataset.csvProduct !== undefined) { csvStaat.koppeling[el.dataset.csvProduct] = el.value; csvRender(false); return; }
+  if (k === 'datum' || k === 'voer' || k === 'kg') { c[k] = +el.value; if (k === 'datum') c.notatie = raadDatumNotatie(csvStaat.rows.slice(0, 200).map(r => r[c.datum])); csvRender(true); return; }
+  if (k === 'notatie' || k === 'eenheid') { c[k] = el.value; csvRender(false); return; }
+  if (k === 'koeien') { c.koeien = num(el.value, 0); csvRender(false); return; }
+  if (/^f\d$/.test(k)) { c.filters[+k[1]] = { kolom: +el.value, waarde: '' }; csvRender(true); return; }
+  if (/^fw\d$/.test(k)) { c.filters[+k[2]].waarde = el.value; csvRender(true); return; }
+}
+async function csvInlezen() {
+  if (!csvStaat) return;
+  const { cfg, header, koppeling, bestand } = csvStaat;
+  if (!(cfg.koeien > 0)) { toast('Vul het aantal melkkoeien in.'); return; }
+  const R = csvNaarDagen(csvStaat.rows, cfg, koppeling);
+  const dagen = Object.keys(R.dagen).sort();
+  const b = huidigBedrijf();
+  if (b) {
+    b.csvKoppeling = { datum: header[cfg.datum], voer: header[cfg.voer], kg: header[cfg.kg], notatie: cfg.notatie, eenheid: cfg.eenheid,
+      filters: cfg.filters.filter(f => f.kolom >= 0).map(f => ({ kolom: header[f.kolom], waarde: f.waarde })), producten: koppeling };
+    bewaarBedrijf(b).catch(() => {});
+  }
+  sluitBlad();
+  for (const d of dagen) {
+    const voer = {}; Object.entries(R.dagen[d]).forEach(([id, kg]) => { voer[id] = Math.round(kg * 10) / 10; });
+    try { await bewaarGevoerd({ id: gevoerdId('dag', d), bedrijf: S.bedrijfId, soort: 'dag', datum: d, koeien: cfg.koeien, rest: 0, voer, bron: 'csv', bestand, gewijzigd: new Date().toISOString() }); } catch (e) { break; }
+  }
+  csvStaat = null;
+  S.mwWeergave = 'gevoerd'; S.gevoerdDatum = dagen[dagen.length - 1] <= vandaagISO() ? dagen[dagen.length - 1] : null;
+  toast(`${dagen.length} ${dagen.length === 1 ? 'dag' : 'dagen'} ingelezen`);
+  render();
+}
+function uitlegCsv() {
+  return `${bladKop('CSV inlezen')}
+    <p>Een CSV-bestand is een tabel als tekst, zoals weegsystemen en Excel die exporteren. De app leest per regel de datum, het voer en het gewicht, en telt per dag op hoeveel kg van elk voer er in de mengwagen is gegaan.</p>
+    <h3>Stappen</h3>
+    <ol>
+      <li><b>Bestand kiezen.</b> Bij FeedLink stuur je de export per e-mail naar jezelf; sla de bijlage op en kies die hier.</li>
+      <li><b>Kolommen kiezen:</b> welke kolom de datum is, welke het voer of ingrediënt en welke het gewicht. De app doet een voorstel op basis van de kolomnamen. Staan de gewichten in pond, kies dan "pond"; de app rekent om naar kg (1 lb = 0,4536 kg).</li>
+      <li><b>Alleen de melkkoeien:</b> staan er ook ladingen voor droge koeien en jongvee in, of ook het uitladen, kies dan met het filter alleen de regels van de melkkoeien en alleen het laden.</li>
+      <li><b>Producten koppelen:</b> de namen in het bestand koppel je één keer aan jullie voeders. Een product op "Overslaan" telt niet mee.</li>
+      <li><b>Inlezen.</b> Per dag ontstaat een ingelezen dag. Die gaat voor op de ingevulde hoeveelheden. Lees je dezelfde dag opnieuw in, dan wordt die overschreven.</li>
+    </ol>
+    <p>De app onthoudt de kolommen, filters en koppelingen per bedrijf. De volgende keer hoef je alleen het bestand te kiezen.</p>
+    <p class="small muted">Restvoer staat meestal niet in de export; daarvoor rekent de app met 0. Het aantal melkkoeien vul je in het scherm in.</p>`;
 }
 
 // ---------- Mest ----------
@@ -1976,7 +2622,7 @@ function openUitleg(onderwerp, id) {
     kosten100: uitlegKosten100, kosten: uitlegKosten, ds: uitlegDs, vem: uitlegVem, dve: uitlegDve,
     oeb: uitlegOeb, sw: uitlegSw, melkgeld: uitlegMelkgeld, curve: uitlegCurve,
     zs: uitlegZs, voorraad: () => uitlegVoorraad(id), fosfaat: uitlegFosfaat, watals: uitlegWatAls, waarde: uitlegWaarde,
-    mest: uitlegMest, geschiedenis: uitlegGeschiedenis, scenarios: uitlegScenarios, marktprijzen: uitlegMarktprijzen,
+    mest: uitlegMest, producten: uitlegProducten, mengwagen: uitlegMengwagen, csv: uitlegCsv, geschiedenis: uitlegGeschiedenis, scenarios: uitlegScenarios, marktprijzen: uitlegMarktprijzen,
   }[onderwerp];
   if (!fn) return;
   const html = fn();
@@ -2668,6 +3314,7 @@ function viewVoeders() {
   const koeien = num(i.koeien, 0);
   const groepen = [['ruwvoer', 'Ruwvoer'], ['bijproduct', 'Bijproducten'], ['krachtvoer', 'Krachtvoer'], ['mineraal', 'Mineralen']];
   let out = `<div class="sectie-kop"><h1>Voeders en kuilen</h1>${S.kanSchrijven ? '<button class="btn prim" data-act="nieuw">Voer of kuil toevoegen</button>' : ''}</div>
+    <div class="knoppen"><button class="btn" data-act="productoverzicht">Productoverzicht: wat past in ons rantsoen?</button></div>
     <p class="small muted">Tik op een voer om de analyse, prijs of grenzen aan te passen. Elke nieuwe kuil voeg je apart toe, bijvoorbeeld "Graskuil 1e snede 2026".</p>`;
   groepen.forEach(([s, titel]) => {
     const vs = lijst.filter(v => (v.soort || 'bijproduct') === s);
@@ -3199,7 +3846,7 @@ function verwijderMoment(id) {
   S.bewaard = S.bewaard.filter(m => m.id !== id);
   return verwijder('bewaard/' + id);
 }
-const MOMENT_REDEN = { handmatig: '', 'voor-advies': 'Automatisch, voor het overnemen van het advies', 'voor-terugzetten': 'Automatisch, voor het terugzetten van een ouder rantsoen' };
+const MOMENT_REDEN = { handmatig: '', 'voor-advies': 'Automatisch, voor het overnemen van het advies', 'voor-mengwagen': 'Automatisch, voor het overnemen van de mengwagen', 'voor-terugzetten': 'Automatisch, voor het terugzetten van een ouder rantsoen' };
 // Een momentopname van het huidige rantsoen, met de analyses en prijzen van dat moment
 function rantsoenMoment(notitie, reden) {
   const { i, P, H, eH, mH } = berekenAlles();
@@ -3606,7 +4253,9 @@ function openNieuwBedrijf() {
 
 function openNieuw() {
   const knoppen = SJABLONEN.map(t => `<button class="sjabloon" data-act="sjabloon" data-key="${t.key}"><b>${t.key === 'leeg' ? 'Zelf invullen' : esc(t.naam)}</b><span>${esc(t.uitleg)}</span></button>`).join('');
-  openBlad(`${bladKop('Voer of kuil toevoegen')}<p class="small muted">Kies een begin. De voederwaarden zijn gemiddelden; vervang ze door de kuilanalyse of het productblad van de leverancier.</p><div class="sjablonen">${knoppen}</div>`);
+  openBlad(`${bladKop('Voer of kuil toevoegen')}<p class="small muted">Kies een begin. De voederwaarden zijn gemiddelden; vervang ze door de kuilanalyse of het productblad van de leverancier.</p>
+    <div class="knoppen"><button class="btn" data-act="productoverzicht">Kiezen uit het productoverzicht (Van Vulpen)</button></div>
+    <div class="sjablonen">${knoppen}</div>`);
 }
 
 function openVoer(v, isNieuw) {
@@ -3883,6 +4532,23 @@ document.addEventListener('click', ev => {
   else if (act === 'scenario-weg-ja') { verwijderMoment(t.dataset.id).then(() => toast('Scenario verwijderd')).catch(() => {}); sluitBlad(); $('#view').innerHTML = viewWatAls(); }
   else if (act === 'scenario-laden') scenarioLaden(t.dataset.id);
   else if (act === 'eigen-prijzen') openEigenPrijzen();
+  else if (act === 'mw-weergave') { S.mwWeergave = t.dataset.w; S.bevestig = null; render(); }
+  else if (act === 'gevoerd-form') openGevoerdForm(t.dataset.datum);
+  else if (act === 'gv-vandaag') { S.gevoerdDatum = null; render(); }
+  else if (act === 'gv-weg-vraag') { $('#gv-weg-plek').innerHTML = `<div class="melding kritiek"><span class="stip"></span><div>Deze invoer verwijderen? Daarna gelden vanaf die datum weer de hoeveelheden van de invoer ervoor.<div class="knoppen"><button type="button" class="btn klein gevaar" data-act="gv-weg-ja" data-id="${esc(t.dataset.id)}">Ja, verwijder</button><button type="button" class="btn klein" data-act="gv-weg-nee">Nee</button></div></div></div>`; }
+  else if (act === 'gv-weg-nee') { $('#gv-weg-plek').innerHTML = ''; }
+  else if (act === 'gv-weg-ja') { verwijderGevoerd(t.dataset.id).then(() => toast('Verwijderd')).catch(() => {}); sluitBlad(); render(); }
+  else if (act === 'gv-gemiddeld-vraag') { S.bevestig = 'gv-gemiddeld'; render(); }
+  else if (act === 'gv-gemiddeld-nee' || act === 'gv-dagen-weg-nee') { S.bevestig = null; render(); }
+  else if (act === 'gv-gemiddeld-ja') gevoerdGemiddeldOvernemen();
+  else if (act === 'gv-dagen-weg-vraag') { S.bevestig = 'gv-dagen-weg'; render(); }
+  else if (act === 'gv-dagen-weg-ja') { S.bevestig = null; const weg = gevoerdRecords().filter(r => r.soort === 'dag'); weg.forEach(r => verwijderGevoerd(r.id).catch(() => {})); toast(`${weg.length} ingelezen dagen verwijderd`); render(); }
+  else if (act === 'csv-import') openCsvImport();
+  else if (act === 'productoverzicht') openProductoverzicht();
+  else if (act === 'product-open') openProduct(t.dataset.naam);
+  else if (act === 'product-melkvee') { S.productMelkvee = t.checked; openProductoverzicht(); }
+  else if (act === 'product-toevoegen') { const pr = (producten().producten || []).find(x => x.naam === t.dataset.naam); if (pr) openVoer(productAlsVoer(pr), true); }
+  else if (act === 'csv-inlezen') csvInlezen();
   else if (act === 'mest-ijken') { const x = ins(); S.ins = Object.assign({}, x, { mestRef: Object.assign(mestRefVastleggen(S.voeders, x), { datum: vandaagISO() }) }); bewaarIns(true); toast('Mestafvoer hoort nu bij het rantsoen van vandaag'); render(); }
   else if (act === 'prijzen-ophalen') prijzenOphalen(true);
   else if (act === 'prijzen-form') openPrijzenForm();
@@ -3899,6 +4565,9 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => {
   if (ev.target.id === 'logo-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; logoKiezen(file); return; }
   if (ev.target.id === 'backup-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; backupLezen(file); return; }
+  if (ev.target.id === 'csv-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; csvBestand(file); return; }
+  if (ev.target.id === 'gv-datum') { const d = ev.target.value; S.gevoerdDatum = d && d !== vandaagISO() ? d : null; render(); return; }
+  if (ev.target.closest && ev.target.closest('#csvform, #csv-koppeling') && (ev.target.dataset.csv !== undefined || ev.target.dataset.csvProduct !== undefined)) { csvWijzig(ev.target); return; }
   if (ev.target.closest && ev.target.closest('#koppelform')) leesKoppelForm();
 });
 // Logo dat niet laadt: toon de initialen
