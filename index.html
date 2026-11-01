@@ -296,6 +296,10 @@ details.tabelweergave table { margin-top: 8px; }
 .veld textarea { min-height: 64px; resize: vertical; }
 .veld.fout input { border-color: var(--bad); }
 .veld .fouttekst { color: var(--bad); font-size: 12.5px; }
+.met-teken { display: grid; grid-template-columns: 44px minmax(0, 1fr); }
+.met-teken input { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.teken-knop { min-height: 44px; border: 1px solid var(--line); border-right: 0; border-radius: 8px 0 0 8px; background: var(--surface-2); color: var(--ink); font-size: 20px; font-weight: 600; cursor: pointer; padding: 0; }
+.teken-knop:active { background: var(--line); }
 .eenheid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .eenheid select { width: auto; }
 .vink { display: flex; gap: 10px; align-items: center; min-height: 44px; font-weight: 500; }
@@ -399,7 +403,8 @@ details.uitleg[open] summary { margin-bottom: 8px; }
 const ONDERHOUD_FACTOR = { stal: 53.0, beperkt: 61.0, weide: 68.9 };
 
 function num(v, d) {
-  const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : v;
+  // Accepteert ook het typografische minteken (−) en streepjes die sommige toetsenborden invoegen
+  const n = typeof v === 'string' ? parseFloat(v.replace(/[−–—‒]/g, '-').replace(/\s+/g, '').replace(',', '.')) : v;
   return Number.isFinite(n) ? n : d;
 }
 
@@ -1401,6 +1406,22 @@ function normMeters(R) {
   </div>`;
 }
 
+// ---------- Getalinvoer met ±-knop ----------
+// Het cijfertoetsenbord van de iPhone heeft geen minteken; de ±-knop draait het teken om.
+function getalInvoer(id, name, waarde, attr, teken) {
+  const input = `<input id="${id}" name="${name}" inputmode="decimal" autocomplete="off" value="${esc(invoer(waarde))}"${attr || ''}>`;
+  if (!teken) return input;
+  return `<div class="met-teken"><button type="button" class="teken-knop" data-act="teken" data-voor="${id}" aria-label="Positief of negatief maken">±</button>${input}</div>`;
+}
+function draaiTeken(id) {
+  const el = document.getElementById(id);
+  if (!el || el.readOnly || el.disabled) return;
+  const v = el.value.trim().replace(/^[−–—‒]/, '-');
+  el.value = v.startsWith('-') ? v.slice(1) : (v === '' ? '-' : '-' + v);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 // ---------- Uitleg (info-knoppen) ----------
 function uitlegKnop(i, id, label) {
   return `<button type="button" class="info-knop" data-act="info" data-i="${i}"${id ? ` data-id="${esc(id)}"` : ''} aria-label="Uitleg: ${esc(label)}"><span aria-hidden="true">i</span></button>`;
@@ -1751,7 +1772,7 @@ function openMelkprijs() {
     <p class="small muted">Geldt voor ${esc(b ? b.naam : 'dit bedrijf')}.</p>
     <form class="form" id="melkform" novalidate>
       <label class="keuze"><input type="radio" name="modus" value="campina"${eigen ? '' : ' checked'}><span><b>Campina-garantieprijs met onze gehaltes</b><span class="small muted">Nu ${eur(campina)} per 100 kg bij ${n(num(i.vet, 0), 2)}% vet en ${n(num(i.eiwit, 0), 2)}% eiwit (${maandNL(P.melk.maand)}). Volgt elke maand de nieuwe prijs.</span></span></label>
-      <div class="veld" id="m-veld-toeslag"${eigen ? ' hidden' : ''}><label for="m-toeslag">Toeslagen min inhoudingen</label><input id="m-toeslag" name="toeslag" inputmode="decimal" autocomplete="off" value="${esc(invoer(i.toeslag))}"><span class="hint">€ per 100 kg erbij (of eraf met een min), bijvoorbeeld Foqus planet of kwantumtoeslag</span></div>
+      <div class="veld" id="m-veld-toeslag"${eigen ? ' hidden' : ''}><label for="m-toeslag">Toeslagen min inhoudingen</label>${getalInvoer('m-toeslag', 'toeslag', i.toeslag, '', true)}<span class="hint">€ per 100 kg erbij, bijvoorbeeld Foqus planet of kwantumtoeslag. Met ± maak je er een aftrek van.</span></div>
       <label class="keuze"><input type="radio" name="modus" value="eigen"${eigen ? ' checked' : ''}><span><b>Eigen melkprijs</b><span class="small muted">Een vaste prijs die jullie zelf invullen, bijvoorbeeld van de laatste melkgeldafrekening.</span></span></label>
       <div class="veld" id="m-veld-eigen" data-veld="eigen"${eigen ? '' : ' hidden'}><label for="m-eigen">Melkprijs</label><input id="m-eigen" name="eigen" inputmode="decimal" autocomplete="off" value="${esc(invoer(i.eigenMelkprijs || ''))}" placeholder="bijv. 48,50"><span class="hint">€ per 100 kg, excl. btw</span></div>
       <div class="blad-voet"><button type="submit" class="btn prim">Opslaan</button><button type="button" class="btn" data-act="sluit">Annuleren</button></div>
@@ -1928,7 +1949,7 @@ function voerKaart(v, P, O, koeien) {
 function viewKoppel() {
   const i = ins();
   const ro = S.kanSchrijven ? '' : ' disabled';
-  const veld = (id, label, waarde, hint, cls = '', attr = '') => `<div class="veld${cls}"><label for="k-${id}">${label}</label><input id="k-${id}" name="${id}" inputmode="decimal" autocomplete="off" value="${esc(invoer(waarde))}"${ro}${attr}>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const veld = (id, label, waarde, hint, cls = '', attr = '', teken = false) => `<div class="veld${cls}"><label for="k-${id}">${label}</label>${getalInvoer(`k-${id}`, id, waarde, ro + attr, teken && !ro)}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
   const B = behoefte(i, num(i.melk, 28), 970);
   const b = huidigBedrijf();
   const magLogo = S.kanSchrijven && (S.modus !== 'db' || assetsNs);
@@ -1962,7 +1983,7 @@ function viewKoppel() {
     <section class="panel"><fieldset><legend>Melkprijs</legend>
       <label class="keuze"><input type="radio" name="melkprijsModus" value="campina"${i.melkprijsModus === 'eigen' ? '' : ' checked'}${ro}><span><b>Campina-garantieprijs met onze gehaltes</b><span class="small muted">Volgt elke maand de nieuwe prijs.</span></span></label>
       <div class="velden"${i.melkprijsModus === 'eigen' ? ' hidden' : ''} id="k-veld-toeslag">
-        ${veld('toeslag', 'Toeslagen min inhoudingen', i.toeslag, '€ per 100 kg, bovenop de garantieprijs', ' vol')}
+        ${veld('toeslag', 'Toeslagen min inhoudingen', i.toeslag, '€ per 100 kg, bovenop de garantieprijs; met ± maak je er een aftrek van', ' vol', '', true)}
       </div>
       <label class="keuze"><input type="radio" name="melkprijsModus" value="eigen"${i.melkprijsModus === 'eigen' ? ' checked' : ''}${ro}><span><b>Eigen melkprijs</b><span class="small muted">Vaste prijs, bijvoorbeeld van de laatste melkgeldafrekening.</span></span></label>
       <div class="velden"${i.melkprijsModus === 'eigen' ? '' : ' hidden'} id="k-veld-eigen">
@@ -1976,14 +1997,14 @@ function viewKoppel() {
       <div class="velden">
         ${veld('dsOpname', 'Droge-stofopname', i.dsAuto !== false ? Math.round(dsAutoVoor(num(i.melk, 28)) * 10) / 10 : i.dsOpname, 'kg DS per koe per dag', '', i.dsAuto !== false ? ' readonly' : '')}
         ${veld('swMin', 'Structuurwaarde minimaal', i.swMin, 'per kg DS')}
-        ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag')}
-        ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag')}
+        ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag', '', '', true)}
+        ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag', '', '', true)}
         ${veld('vemMarge', 'Energie boven behoefte', i.vemMarge, '% dat maximaal mag')}
       </div>
       <label class="vink"><input type="checkbox" id="k-jeugd" name="jeugd"${i.jeugd !== false ? ' checked' : ''}${ro}> Toeslag jeugdgroei (330 VEM, 37 g DVE, koppelgemiddelde)</label>
       <div class="velden">
-        ${veld('extraVem', 'Extra toeslag VEM', i.extraVem, 'bijv. dracht')}
-        ${veld('extraDve', 'Extra toeslag DVE', i.extraDve, 'g')}
+        ${veld('extraVem', 'Extra toeslag VEM', i.extraVem, 'bijv. dracht', '', '', true)}
+        ${veld('extraDve', 'Extra toeslag DVE', i.extraDve, 'g', '', '', true)}
       </div>
     </fieldset></section>
   </form>
@@ -2235,7 +2256,7 @@ function openNieuw() {
 function openVoer(v, isNieuw) {
   const d = Object.assign({}, v);
   const mineraal = d.soort === 'mineraal';
-  const veld = (id, label, waarde, hint, cls = '') => `<div class="veld ${cls}" data-veld="${id}"><label for="f-${id}">${label}</label><input id="f-${id}" name="${id}" inputmode="decimal" autocomplete="off" value="${esc(invoer(waarde))}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const veld = (id, label, waarde, hint, cls = '', teken = false) => `<div class="veld ${cls}" data-veld="${id}"><label for="f-${id}">${label}</label>${getalInvoer(`f-${id}`, id, waarde, '', teken)}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
   const soortSel = `<div class="veld"><label for="f-soort">Soort</label><select id="f-soort" name="soort">${Object.entries(SOORTEN).map(([k, l]) => `<option value="${k}"${d.soort === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>`;
   let html = bladKop(isNieuw ? 'Nieuw voer' : esc(d.naam || 'Voer'));
   html += `<form class="form" id="voerform" novalidate>
@@ -2247,8 +2268,8 @@ function openVoer(v, isNieuw) {
       <div class="velden drie">
         ${veld('ds', 'Droge stof', d.ds, '% van product')}
         ${veld('vem', 'VEM2022', d.vem, 'per kg DS')}
-        ${veld('dve', 'DVE', d.dve, 'g per kg DS')}
-        ${veld('oeb', 'OEB', d.oeb, 'g per kg DS')}
+        ${veld('dve', 'DVE', d.dve, 'g per kg DS', '', true)}
+        ${veld('oeb', 'OEB', d.oeb, 'g per kg DS', '', true)}
         ${veld('sw', 'Structuur (SW)', d.sw, 'per kg DS')}
         <div class="veld vol"><label for="f-analyse">Analysedatum</label><input id="f-analyse" name="analyse" type="date" value="${esc(d.analyse || '')}"></div>
       </div>
@@ -2432,6 +2453,7 @@ document.addEventListener('click', ev => {
   else if (act === 'bedrijf-weg-ja') { S.bevestig = null; verwijderBedrijf(S.bedrijfId); }
   else if (act === 'info') { ev.stopPropagation(); openUitleg(t.dataset.i, t.dataset.id); }
   else if (act === 'melkprijs') openMelkprijs();
+  else if (act === 'teken') draaiTeken(t.dataset.voor);
   else if (act === 'prijzen-ophalen') prijzenOphalen(true);
   else if (act === 'prijzen-form') openPrijzenForm();
   else if (act === 'backup-maken') backupMaken();

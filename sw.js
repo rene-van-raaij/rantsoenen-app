@@ -1,6 +1,6 @@
 // Service worker: laat de app zonder internet werken.
 // Verhoog VERSIE als je index.html aanpast, dan krijgen telefoons de nieuwe versie.
-const VERSIE = 'rantsoen-v2';
+const VERSIE = 'rantsoen-v3';
 const KERN = [
   './',
   './index.html',
