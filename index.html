@@ -166,6 +166,30 @@ table.uitleg-tabel td small { display: block; font-size: 12.5px; }
 .keuze > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .keuze:has(input:checked) { border-color: var(--mais-strong); background: var(--mais-tint); }
 
+/* Wat als */
+.voorbeelden { display: flex; flex-wrap: wrap; gap: 8px; }
+.voorbeeld { border: 1px solid var(--mais-strong); background: var(--mais-tint); color: var(--ink); border-radius: 999px; padding: 8px 14px; min-height: 40px; font-weight: 600; font-size: 14px; cursor: pointer; text-align: left; }
+.voorbeeld:active { background: var(--surface-2); }
+.uitkomst { border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); background: var(--surface-2); }
+.uitkomst.pos { background: var(--ok-tint); border-color: var(--ok); }
+.uitkomst.neg { background: var(--bad-tint); border-color: var(--bad); }
+.uitkomst .groot { font-family: var(--font-display); font-size: 38px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.uitkomst.pos .groot { color: var(--ok); }
+.uitkomst.neg .groot { color: var(--bad); }
+.posten { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.posten li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.posten li:last-child { border-bottom: 0; }
+.pos { color: var(--ok); }
+.neg { color: var(--bad); }
+.vlijst { display: flex; flex-direction: column; }
+.vrij { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
+.vrij:last-child { border-bottom: 0; }
+.vrij-kop { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.vrij-kop b { white-space: nowrap; }
+.vrij-sub { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.versies { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.uitleg ol { padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; max-width: 62ch; }
+
 /* Knoppen */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn.prim { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
@@ -345,8 +369,8 @@ legend { font-family: var(--font-display); font-size: 19px; font-weight: 700; ma
   padding-left: max(8px, env(safe-area-inset-left, 0px));
   padding-right: max(8px, env(safe-area-inset-right, 0px));
 }
-.tabbalk-binnen { max-width: 680px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.tab { height: var(--tabbar); border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; color: var(--ink-3); font-size: 12px; font-weight: 600; min-width: 0; padding: 0 2px; }
+.tabbalk-binnen { max-width: 680px; margin: 0 auto; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.tab { height: var(--tabbar); border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; color: var(--ink-3); font-size: 11.5px; font-weight: 600; min-width: 0; padding: 0 1px; white-space: nowrap; letter-spacing: -0.01em; }
 .tab svg { width: 24px; height: 24px; }
 .tab[aria-current="page"] { color: var(--ink); }
 .tab[aria-current="page"] svg .acc { fill: var(--mais-strong); }
@@ -396,6 +420,7 @@ details.uitleg[open] summary { margin-bottom: 8px; }
     <button class="tab" data-tab="voeders"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 19.5C4 12 8 8 12 8s8 4 9.5 11.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path class="acc" d="M8.5 19.5c.8-3.4 2-5.5 3.5-5.5s2.7 2.1 3.5 5.5z" fill="currentColor"/></svg>Voeders</button>
     <button class="tab" data-tab="bedrijf"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20V10.5L12 4l9 6.5V20z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path class="acc" d="M9.5 20v-6h5v6z" fill="currentColor"/></svg>Bedrijf</button>
     <button class="tab" data-tab="vergelijk"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="11" width="3.5" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect class="acc" x="10.25" y="5" width="3.5" height="13" rx="1" fill="currentColor"/><rect x="15" y="8.5" width="3.5" height="9.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Vergelijk</button>
+    <button class="tab" data-tab="watals"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="7" r="2.6" fill="var(--surface)" stroke="currentColor" stroke-width="1.8"/><circle class="acc" cx="15" cy="17" r="2.8" fill="currentColor"/></svg>Wat als</button>
     <button class="tab" data-tab="prijzen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="acc" d="M5 10h8v1.6H5zM5 12.6h8v1.6H5z" fill="currentColor"/></svg>Prijzen</button>
   </div>
 </nav>
@@ -896,6 +921,58 @@ function schaduwPrijzen(voeders, ins, melk) {
   };
 }
 
+// ---------- Wat als: scenario's ----------
+// Bouw de instellingen van een scenario: lege velden blijven gelijk aan de huidige situatie.
+function scenarioIns(basis, w) {
+  w = w || {};
+  const s = Object.assign({}, basis);
+  const v = k => ingevuld(w[k]) ? num(w[k], 0) : null;
+  const melkB = num(basis.melk, 28), koeienB = num(basis.koeien, 0);
+  if (v('melk') !== null) s.melk = v('melk');
+  if (v('vet') !== null) s.vet = v('vet');
+  if (v('eiwit') !== null) s.eiwit = v('eiwit');
+  if (v('koeien') !== null) s.koeien = v('koeien');
+  if (num(basis.koeienTotaal, 0) > 0 && koeienB > 0) s.koeienTotaal = num(basis.koeienTotaal, 0) * num(s.koeien, 0) / koeienB;
+  if (num(basis.jaarMelk, 0) > 0 && melkB > 0) s.jaarMelk = num(basis.jaarMelk, 0) * num(s.melk, 0) / melkB;
+  if (v('fosfaatrechten') !== null) s.fosfaatrechten = v('fosfaatrechten');
+  if (v('fosfaatPrijs') !== null) s.fosfaatPrijs = v('fosfaatPrijs');
+  const dp = v('melkprijsDelta');
+  if (dp) {
+    if (s.melkprijsModus === 'eigen' && num(s.eigenMelkprijs, 0) > 0) s.eigenMelkprijs = num(s.eigenMelkprijs, 0) + dp;
+    else s.toeslag = num(s.toeslag, 0) + dp;
+  }
+  s.extraKosten = v('extraKosten') || 0;
+  return s;
+}
+// Uitkomst van een situatie: goedkoopste rantsoen, melkgeld, fosfaat, saldo per koe per dag en per jaar.
+function scenarioUitkomst(voeders, x, melkPrijzen) {
+  const melk = num(x.melk, 28), koeien = num(x.koeien, 0), vet = num(x.vet, 4.4), eiwit = num(x.eiwit, 3.55);
+  const R = optimaal(voeders, x, melk);
+  const prijs = melkprijsPerKg(x, melkPrijzen);
+  const melkgeld = melk * prijs, voer = R ? R.T.kosten : NaN, extra = num(x.extraKosten, 0);
+  const F = fosfaatBeeld(x);
+  const dagVoorFosfaat = melkgeld - voer - extra;
+  const fosfaatJaar = F ? F.kostenJaar : 0;
+  const d = 365 * koeien;
+  return {
+    ins: x, R, melk, koeien, vet, eiwit, prijs100: prijs * 100, F,
+    kgVetEiwit: melk * (vet + eiwit) / 100,
+    dag: { melkgeld, voer, extra, fosfaat: F ? F.kostenPerKoeDag : 0, saldo: dagVoorFosfaat - (F ? F.kostenPerKoeDag : 0) },
+    jaar: {
+      melk: melk * d, kgVetEiwit: melk * (vet + eiwit) / 100 * d,
+      melkgeld: melkgeld * d, voer: voer * d, extra: extra * d, fosfaat: fosfaatJaar,
+      saldo: dagVoorFosfaat * d - fosfaatJaar,
+    },
+    problemen: R ? R.problemen : [],
+  };
+}
+// Wat is een kleine verandering waard? (verschil in saldo per jaar voor het hele bedrijf)
+function waardeVan(voeders, basis, melkPrijzen, w) {
+  const a = scenarioUitkomst(voeders, basis, melkPrijzen);
+  const b = scenarioUitkomst(voeders, scenarioIns(basis, w), melkPrijzen);
+  return { basis: a, scenario: b, jaar: b.jaar.saldo - a.jaar.saldo, perKoeDag: b.dag.saldo - a.dag.saldo };
+}
+
 // Voersaldo bij verschillende melkgiften
 function saldoCurve(voeders, ins, melkPrijzen) {
   const m0 = Math.round(num(ins.melk, 28));
@@ -909,12 +986,21 @@ function saldoCurve(voeders, ins, melkPrijzen) {
   return pts;
 }
 
-if (typeof module !== "undefined") module.exports = { voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
+if (typeof module !== "undefined") module.exports = { scenarioIns, scenarioUitkomst, waardeVan, voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
 
 </script>
 <script>
 'use strict';
 const STANDALONE = true; // wordt bij het bouwen van de losse app op true gezet
+const APP_VERSIE = '1.5';
+const WIJZIGINGEN = [
+  ['1.5', '2026-11-01', 'Tabblad Wat als: scenario\'s voor melk, gehaltes, koeien, melkprijs en fosfaatrechten, en wat 0,1% eiwit of vet waard is. Versienummer en dit overzicht.'],
+  ['1.4', '2026-11-01', 'Fosfaatrechten (RVO-tabel 2026), grens voor zetmeel en suiker, voorraadplanning per voer. Grafiek meer melk rekent fosfaat mee.'],
+  ['1.3', '2026-11-01', '±-knop om negatieve waarden in te vullen (OEB, DVE, toeslag).'],
+  ['1.2', '2026-11-01', 'Uitleg bij elk onderdeel (i-knoppen), eigen melkprijs per bedrijf.'],
+  ['1.1', '2026-10-30', 'Losse app: gegevens op de telefoon, werkt zonder internet, back-up. Meerdere bedrijven met logo, vergelijken.'],
+  ['1.0', '2026-10-30', 'Eerste versie: voeders en kuilanalyses, goedkoopste rantsoen, voersaldo, WUR- en Campina-prijzen.'],
+];
 // ===================== Gegevens =====================
 const BRON_WUR = 'https://www.wur.nl/nl/onderzoek/producten-diensten/voederwaardeprijzen-rundvee';
 const BRON_FC = 'https://www.frieslandcampina.com/nl/eigendom-van-boeren/garantieprijs/';
@@ -1091,7 +1177,7 @@ async function start() {
   try { cdb = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('db') : null; } catch (e) { cdb = null; }
   if (!cdb) { startLokaal(); return; }
   db = cdb; S.modus = 'db';
-  $('#opslag-status').textContent = '';
+  $('#opslag-status').textContent = 'versie ' + APP_VERSIE;
   db.collection('bedrijven').onSnapshot(q => {
     S.bedrijven = q.docs.map(d => Object.assign({ id: d.id }, d.data()));
     if (insWacht) { const i = S.bedrijven.findIndex(b => b.id === insWacht.id); if (i >= 0) S.bedrijven[i] = insWacht; }
@@ -1126,7 +1212,7 @@ function startLokaal() {
   }
   S.geladen = { bedrijven: true, voeders: true, prijzen: true };
   afleiden();
-  $('#opslag-status').textContent = STANDALONE ? 'Opgeslagen op deze telefoon' : 'Opgeslagen op dit toestel';
+  $('#opslag-status').textContent = (STANDALONE ? 'Opgeslagen op deze telefoon' : 'Opgeslagen op dit toestel') + ' · versie ' + APP_VERSIE;
   render();
 }
 
@@ -1371,6 +1457,11 @@ function render() {
   } else if (S.tab === 'voeders') v.innerHTML = viewVoeders();
   else if (S.tab === 'prijzen') v.innerHTML = viewPrijzen();
   else if (S.tab === 'vergelijk') v.innerHTML = viewVergelijk();
+  else if (S.tab === 'watals') {
+    const actief = document.activeElement;
+    if (actief && actief.closest && actief.closest('#watalsform')) { const r = $('#watals-resultaat'); if (r) r.innerHTML = watAlsResultaat(); return; }
+    v.innerHTML = viewWatAls();
+  }
   else if (!S.voeders.length) v.innerHTML = viewLeeg();
   else { v.innerHTML = viewRantsoen(); bindGrafiek(); }
 }
@@ -1643,7 +1734,7 @@ function openUitleg(onderwerp, id) {
     voer: () => uitlegVoer(id), advies: uitlegAdvies, saldo: uitlegSaldo, verschil: uitlegVerschil,
     kosten100: uitlegKosten100, kosten: uitlegKosten, ds: uitlegDs, vem: uitlegVem, dve: uitlegDve,
     oeb: uitlegOeb, sw: uitlegSw, melkgeld: uitlegMelkgeld, curve: uitlegCurve,
-    zs: uitlegZs, voorraad: () => uitlegVoorraad(id), fosfaat: uitlegFosfaat,
+    zs: uitlegZs, voorraad: () => uitlegVoorraad(id), fosfaat: uitlegFosfaat, watals: uitlegWatAls, waarde: uitlegWaarde,
   }[onderwerp];
   if (!fn) return;
   const html = fn();
@@ -2353,6 +2444,13 @@ function viewKoppel() {
     <div class="knoppen"><button class="btn" data-act="backup-maken">Back-up maken</button><label class="btn" for="backup-input">Back-up terugzetten</label><input type="file" id="backup-input" accept=".json,application/json" class="verborgen"></div>
     ${S.bevestig === 'import' && backupWacht ? `<div class="melding kritiek"><span class="stip"></span><div>De back-up van ${datumNL(String(backupWacht.gemaakt || '').slice(0, 10))} bevat ${backupWacht.bedrijven.length} bedrijven en ${backupWacht.voeders.length} voeders. Alles wat nu op deze telefoon staat wordt vervangen.<div class="knoppen"><button class="btn klein gevaar" data-act="import-ja">Ja, terugzetten</button><button class="btn klein" data-act="import-nee">Annuleren</button></div></div></div>` : ''}
   </section>` : ''}
+  <section class="panel">
+    <h3>Over deze app</h3>
+    <p class="small">Versie <b>${APP_VERSIE}</b> van ${datumNL(WIJZIGINGEN[0][1])}. ${STANDALONE ? 'Een nieuwe versie zet je op GitHub; de telefoon haalt die op als je de app met internet opent. Staat hier na het bijwerken nog het oude nummer, sluit de app dan en open hem opnieuw.' : ''}</p>
+    <details class="uitleg"><summary>Wat is nieuw</summary>
+      <ul class="versies">${WIJZIGINGEN.map(([v, d, t]) => `<li><b>${v}</b> <span class="muted small">${datumNL(d, true)}</span><br>${esc(t)}</li>`).join('')}</ul>
+    </details>
+  </section>
   ${S.kanSchrijven ? `<section class="panel">
     <h3>Bedrijf verwijderen</h3>
     <p class="small muted">Verwijdert ${esc(b.naam || 'dit bedrijf')} met alle voeders, kuilanalyses en het rantsoen. Dit kan niet ongedaan worden gemaakt.</p>
@@ -2465,6 +2563,171 @@ function viewVergelijk() {
     <p class="small muted">Tik op een bedrijf in de grafiek om het rantsoen ervan te openen. Fosfaatruimte = fosfaatrechten min de fosfaatproductie volgens de RVO-tabel; "–" als de rechten niet zijn ingevuld.</p>
   </section>`;
   return out;
+}
+
+// ---------- Wat als ----------
+const WATALS_VELDEN = ['melk', 'vet', 'eiwit', 'koeien', 'melkprijsDelta', 'extraKosten', 'fosfaatrechten', 'fosfaatPrijs'];
+function watAls() { const i = ins(); return Object.assign({}, i.watAls || {}); }
+function watAlsUitkomst() {
+  const i = ins(), P = prijzen();
+  const nu = scenarioUitkomst(S.voeders, i, P.melk);
+  const sc = scenarioUitkomst(S.voeders, scenarioIns(i, watAls()), P.melk);
+  return { i, P, nu, sc };
+}
+function viewWatAls() {
+  const i = ins(), w = watAls();
+  const ro = S.kanSchrijven ? '' : ' disabled';
+  const veld = (id, label, plh, hint, teken) => `<div class="veld" data-veld="${id}"><label for="w-${id}">${label}</label>${getalInvoer(`w-${id}`, id, w[id], ` placeholder="${esc(plh)}"${ro}`, teken && !ro)}<span class="hint">${hint}</span></div>`;
+  const F = fosfaatBeeld(i);
+  const waarde = (() => {
+    const P = prijzen();
+    const rij = (label, wz) => { const r = waardeVan(S.voeders, i, P.melk, wz); return `<tr><td>${label}</td><td class="n"><b>${eurPlus(r.jaar)}</b></td><td class="n">${eurPlus(r.perKoeDag, 2)}</td></tr>`; };
+    return `<div class="tabel-wrap"><table class="rt"><thead><tr><th>Als…</th><th>Per jaar</th><th>Per koe per dag</th></tr></thead><tbody>
+      ${rij('+0,1% eiwit', { eiwit: Math.round((num(i.eiwit, 0) + 0.1) * 100) / 100 })}
+      ${rij('+0,1% vet', { vet: Math.round((num(i.vet, 0) + 0.1) * 100) / 100 })}
+      ${rij('+1 kg melk per koe', { melk: num(i.melk, 0) + 1 })}
+    </tbody></table></div>
+    <p class="small muted">Een min betekent: het extra voer${fosfaatBeeld(i) ? ' of de extra fosfaatrechten kosten' : ' kost'} meer dan het extra melkgeld oplevert. Tik op ⓘ voor de berekening.</p>`;
+  })();
+  return `<div class="sectie-kop"><h1>Wat als…</h1>${uitlegKnop('watals', '', 'hoe Wat als rekent')}</div>
+  <p class="small muted">Reken uit wat een andere situatie per jaar oplevert ten opzichte van nu: meer of minder melk, andere gehaltes, meer koeien, een andere melkprijs of andere fosfaatrechten. De app rekent voor beide het goedkoopste rantsoen uit.</p>
+  <section class="panel">
+    <div class="sectie-kop"><h2>Wat is het waard? ${uitlegKnop('waarde', '', 'wat is het waard')}</h2></div>
+    <p class="small muted">Wat een kleine verandering het hele bedrijf per jaar oplevert, na het extra voer${F ? ' en de fosfaatrechten' : ''}.</p>
+    ${waarde}
+  </section>
+  <section class="panel">
+    <h2>Scenario</h2>
+    <p class="small muted">Vul alleen in wat anders is dan nu. Een leeg veld blijft gelijk aan de huidige situatie (grijs).</p>
+    ${S.kanSchrijven ? `<div class="voorbeelden" role="group" aria-label="Voorbeelden">
+      <button type="button" class="voorbeeld" data-act="watals-preset" data-p="melk1">+1 kg melk</button>
+      <button type="button" class="voorbeeld" data-act="watals-preset" data-p="gehalte">+0,1% vet en eiwit</button>
+      <button type="button" class="voorbeeld" data-act="watals-preset" data-p="zelfdekg">Zelfde vet en eiwit, 1 kg minder melk</button>
+      <button type="button" class="voorbeeld" data-act="watals-preset" data-p="koeien10">+10 koeien</button>
+    </div>` : ''}
+    <form class="form" id="watalsform" autocomplete="off" novalidate>
+      <fieldset><legend>Productie</legend><div class="velden">
+        ${veld('melk', 'Melk per koe per dag', n(num(i.melk, 0), 1), `kg · nu ${n(num(i.melk, 0), 1)}`)}
+        ${veld('koeien', 'Melkkoeien', n(num(i.koeien, 0)), `nu ${n(num(i.koeien, 0))}`)}
+        ${veld('vet', 'Vetgehalte', n(num(i.vet, 0), 2), `% · nu ${n(num(i.vet, 0), 2)}`)}
+        ${veld('eiwit', 'Eiwitgehalte', n(num(i.eiwit, 0), 2), `% · nu ${n(num(i.eiwit, 0), 2)}`)}
+      </div></fieldset>
+      <fieldset><legend>Geld</legend><div class="velden">
+        ${veld('melkprijsDelta', 'Melkprijs anders', '0', '€ per 100 kg erbij; met ± eraf', true)}
+        ${veld('extraKosten', 'Extra kosten', '0', '€ per koe per dag, bijv. een vetsupplement; met ± een besparing', true)}
+      </div></fieldset>
+      <fieldset><legend>Fosfaatrechten</legend><div class="velden">
+        ${veld('fosfaatrechten', 'Fosfaatrechten', F ? n(F.rechten) : 'niet ingevuld', F ? `kg · nu ${n(F.rechten)}` : 'kg · vul ze eerst in bij Bedrijf')}
+        ${veld('fosfaatPrijs', 'Leaseprijs', n(num(i.fosfaatPrijs, 118)), `€ per kg per jaar · nu ${n(num(i.fosfaatPrijs, 118))}`)}
+      </div></fieldset>
+    </form>
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn klein" data-act="watals-reset">Terug naar de huidige situatie</button></div>' : ''}
+  </section>
+  <div id="watals-resultaat">${watAlsResultaat()}</div>`;
+}
+function watAlsResultaat() {
+  const { nu, sc } = watAlsUitkomst();
+  const leeg = WATALS_VELDEN.every(k => !ingevuld(watAls()[k]));
+  if (leeg) return `<section class="panel"><h2>Uitkomst</h2><p class="muted">Kies hierboven een voorbeeld of vul een ander getal in. Dan zie je hier wat het oplevert.</p></section>`;
+  const vj = sc.jaar.saldo - nu.jaar.saldo, vd = sc.dag.saldo - nu.dag.saldo;
+  const metF = nu.F || sc.F;
+  const dMelkgeld = sc.jaar.melkgeld - nu.jaar.melkgeld, dVoer = sc.jaar.voer - nu.jaar.voer, dExtra = sc.jaar.extra - nu.jaar.extra, dF = sc.jaar.fosfaat - nu.jaar.fosfaat;
+  const post = (label, bedrag, kost) => Math.abs(bedrag) < 0.5 ? '' : `<li><span>${label}</span><b class="${(kost ? -bedrag : bedrag) >= 0 ? 'pos' : 'neg'}">${eurPlus(kost ? -bedrag : bedrag)}</b></li>`;
+  const rij = (label, a, b, f, kostRij, neutraal) => {
+    const d = b - a;
+    const kleur = neutraal || Math.abs(d) < 1e-9 ? '' : ((kostRij ? -d : d) > 0 ? 'pos' : 'neg');
+    const vtekst = Math.abs(d) < 1e-9 ? 'gelijk' : (d > 0 ? '+' : '−') + f(Math.abs(d)).replace(/^−/, '');
+    return `<div class="vrij"><div class="vrij-kop"><span>${label}</span><b class="${kleur}">${vtekst}</b></div><div class="vrij-sub">nu ${f(a)} → scenario ${f(b)}</div></div>`;
+  };
+  const kg = x => n(x) + ' kg', e0 = x => eur(x, 0), e2 = x => eur(x);
+  const krit = sc.problemen.filter(p => p.ernst === 'kritiek');
+  const meerKoeien = sc.koeien > nu.koeien;
+  return `<section class="panel">
+    <div class="sectie-kop"><h2>Uitkomst ${uitlegKnop('watals', '', 'hoe Wat als rekent')}</h2></div>
+    <div class="uitkomst ${vj >= 0 ? 'pos' : 'neg'}"><span class="label">Verschil met nu</span><span class="groot">${eurPlus(vj)}</span><span>per jaar · ${eurPlus(vd, 2)} per koe per dag</span></div>
+    <ul class="posten">
+      ${post('Melkgeld', dMelkgeld, false)}
+      ${post('Voerkosten', dVoer, true)}
+      ${post(dExtra < 0 ? 'Besparing' : 'Extra kosten', dExtra, true)}
+      ${metF ? post('Fosfaatrechten', dF, true) : ''}
+    </ul>
+    ${krit.length ? `<div class="melding kritiek"><span class="stip"></span><div>Met jullie voeders haalt dit scenario de normen niet: ${zinLijst(krit.map(p => esc(klein(p.tekst))))}. De uitkomst is daardoor te gunstig; voeg een geschikt voer toe of kies een kleinere stap.</div></div>` : ''}
+    <h3>Per jaar, voor het hele bedrijf</h3>
+    <div class="vlijst">
+      ${rij('Melk', nu.jaar.melk, sc.jaar.melk, kg, false, true)}
+      ${rij('Vet + eiwit', nu.jaar.kgVetEiwit, sc.jaar.kgVetEiwit, kg)}
+      ${rij('Melkprijs /100 kg', nu.prijs100, sc.prijs100, e2)}
+      ${rij('Melkgeld', nu.jaar.melkgeld, sc.jaar.melkgeld, e0)}
+      ${rij('Voerkosten', nu.jaar.voer, sc.jaar.voer, e0, true)}
+      ${sc.jaar.extra || nu.jaar.extra ? rij('Extra kosten', nu.jaar.extra, sc.jaar.extra, e0, true) : ''}
+      ${metF ? rij('Fosfaatproductie', nu.F ? nu.F.productie : 0, sc.F ? sc.F.productie : 0, kg, true) : ''}
+      ${metF ? rij('Fosfaattekort', nu.F ? nu.F.tekort : 0, sc.F ? sc.F.tekort : 0, kg, true) : ''}
+      ${metF ? rij('Fosfaat bijleasen', nu.jaar.fosfaat, sc.jaar.fosfaat, e0, true) : ''}
+      ${rij('<b>Saldo</b>', nu.jaar.saldo, sc.jaar.saldo, e0)}
+      ${rij('Saldo per koe per dag', nu.dag.saldo, sc.dag.saldo, e2)}
+    </div>
+    <p class="small muted">Saldo = melkgeld − voerkosten${sc.jaar.extra || nu.jaar.extra ? ' − extra kosten' : ''}${metF ? ' − kosten van het fosfaattekort' : ''}. Voerkosten van het goedkoopste rantsoen dat de normen haalt.</p>
+    ${meerKoeien ? '<p class="small muted">Meer koeien kost ook stalruimte, arbeid, jongvee en mestafzet. Die kosten rekent de app niet mee.</p>' : ''}
+    ${!metF ? '<p class="small muted">Fosfaatrechten zijn niet ingevuld, dus die tellen niet mee. Vul ze in bij Bedrijf.</p>' : ''}
+  </section>`;
+}
+function leesWatAls() {
+  const f = $('#watalsform'); if (!f) return;
+  const w = {};
+  WATALS_VELDEN.forEach(k => { const el = f.elements[k]; if (!el) return; const r = el.value.trim(); if (r !== '' && Number.isFinite(num(r, NaN))) w[k] = num(r, NaN); });
+  S.ins = Object.assign({}, ins(), { watAls: w });
+  const res = $('#watals-resultaat'); if (res) res.innerHTML = watAlsResultaat();
+  bewaarIns(false);
+}
+function watAlsVoorbeeld(p) {
+  const i = ins();
+  const m = num(i.melk, 28), vet = num(i.vet, 4.4), eiw = num(i.eiwit, 3.55), k = num(i.koeien, 0);
+  const r2 = x => Math.round(x * 100) / 100;
+  const w = {
+    melk1: { melk: r2(m + 1) },
+    gehalte: { vet: r2(vet + 0.1), eiwit: r2(eiw + 0.1) },
+    zelfdekg: { melk: r2(m - 1), vet: r2(vet * m / (m - 1)), eiwit: r2(eiw * m / (m - 1)) },
+    koeien10: { koeien: k + 10 },
+  }[p];
+  if (!w) return;
+  S.ins = Object.assign({}, i, { watAls: w });
+  bewaarIns(true);
+  $('#view').innerHTML = viewWatAls();
+}
+function uitlegWatAls() {
+  const { nu, sc } = watAlsUitkomst();
+  return `${bladKop('Hoe rekent Wat als?')}
+    <p>De app rekent twee situaties volledig door: <b>nu</b> en het <b>scenario</b>. Voor allebei:</p>
+    <ol>
+      <li><b>Rantsoen:</b> het goedkoopste rantsoen uit jullie voeders dat de normen haalt bij die melkgift en die gehaltes. Hogere gehaltes vragen meer energie en eiwit (meetmelk en DVE), dus het voer verandert mee.</li>
+      <li><b>Melkgeld:</b> kg melk × melkprijs. De Campina-prijs volgt uit de kilo's eiwit en vet, dus hogere gehaltes geven een hogere prijs per 100 kg.</li>
+      <li><b>Fosfaat:</b> melk per koe per jaar → klasse in de RVO-tabel → fosfaatproductie van het koppel (plus jongvee). Een tekort kost de leaseprijs per kg.</li>
+      <li><b>Saldo per jaar:</b> (melkgeld − voerkosten − extra kosten) per koe per dag × melkkoeien × 365, min de fosfaatkosten.</li>
+    </ol>
+    <p class="som">Nu: ${eur(nu.dag.melkgeld + 0)} − ${eur(nu.dag.voer)}${nu.dag.extra ? (nu.dag.extra > 0 ? ` − ${eur(nu.dag.extra)}` : ` + ${eur(-nu.dag.extra)} besparing`) : ''} per koe per dag × ${n(nu.koeien)} × 365${nu.F ? ` − ${eur(nu.jaar.fosfaat, 0)} fosfaat` : ''} = <b>${eur(nu.jaar.saldo, 0)}</b></p>
+    <p class="som">Scenario: ${eur(sc.dag.melkgeld)} − ${eur(sc.dag.voer)}${sc.dag.extra ? (sc.dag.extra > 0 ? ` − ${eur(sc.dag.extra)}` : ` + ${eur(-sc.dag.extra)} besparing`) : ''} per koe per dag × ${n(sc.koeien)} × 365${sc.F ? ` − ${eur(sc.jaar.fosfaat, 0)} fosfaat` : ''} = <b>${eur(sc.jaar.saldo, 0)}</b></p>
+    <h3>Goed om te weten</h3>
+    <ul>
+      <li>De app <b>voorspelt niet</b> of een rantsoen de gehaltes of de melkgift echt verhoogt. Dat vul jij in, bijvoorbeeld op advies van de voeradviseur. Wat de maatregel kost (zoals een vetsupplement), vul je in bij "Extra kosten".</li>
+      <li>Voerkosten kunnen bij hogere gehaltes ook <b>dalen</b>. Zat de energie op het maximum, dan geeft een hogere behoefte ruimte voor goedkopere energie.</li>
+      <li>Dezelfde kilo's vet en eiwit in minder liters leveren hetzelfde melkgeld op, maar hebben minder fosfaatrechten nodig. Probeer het voorbeeld "Zelfde vet en eiwit, 1 kg minder melk".</li>
+      <li>Niet meegerekend: stal, arbeid, jongvee, mestafzet, rente en afschrijving. Bij meer koeien kunnen die flink oplopen.</li>
+      <li>Beide situaties gebruiken de huidige voer- en melkprijzen. De fosfaatrechten worden geleasd tegen de leaseprijs; kopen (eenmalig, nu rond € 345 per kg) rekent de app niet.</li>
+    </ul>`;
+}
+function uitlegWaarde() {
+  const F = fosfaatBeeld(ins());
+  const m = num(ins().melk, 0);
+  const P = prijzen().melk;
+  return `${bladKop('Wat is het waard?')}
+    <p>Voor elke regel rekent de app het hele bedrijf opnieuw door met die ene verandering, en vergelijkt dat met nu: melkgeld, het goedkoopste rantsoen${F ? ' en de fosfaatrechten' : ''}.</p>
+    <ul>
+      <li><b>+0,1% eiwit:</b> ${n(m, 1)} kg × 0,1% = ${n(m * 0.001, 3)} kg eiwit extra per koe per dag × ${eur(P.eiwitwaarde / 100)} per kg = ${eur(m * 0.001 * P.eiwitwaarde / 100)} meer melkgeld per koe per dag. Daar gaan de kosten van het extra eiwit in het voer (DVE) af.</li>
+      <li><b>+0,1% vet:</b> ${n(m * 0.001, 3)} kg vet extra × ${eur(P.vetwaarde / 100)} per kg = ${eur(m * 0.001 * P.vetwaarde / 100)} meer melkgeld per koe per dag, min het extra voer.</li>
+      <li><b>+1 kg melk:</b> het melkgeld van 1 kg, min het extra voer${F ? ', min de extra fosfaatrechten als het bedrijf daarmee in een hogere klasse komt of tekortkomt' : ''}.</li>
+    </ul>
+    <p>Zo zie je wat je maximaal aan een maatregel kunt uitgeven die de gehaltes verhoogt. Kost een vetsupplement bijvoorbeeld meer per koe per dag dan wat +0,1% vet oplevert, dan loont het niet.</p>
+    <p class="small muted">Met de melkprijs van ${maandNL(P.maand)}${ins().melkprijsModus === 'eigen' ? '. Let op: bij een eigen vaste melkprijs veranderen hogere gehaltes het melkgeld niet' : ''}.</p>`;
 }
 
 // ---------- Prijzen ----------
@@ -2825,6 +3088,8 @@ document.addEventListener('click', ev => {
   else if (act === 'info') { ev.stopPropagation(); openUitleg(t.dataset.i, t.dataset.id); }
   else if (act === 'melkprijs') openMelkprijs();
   else if (act === 'teken') draaiTeken(t.dataset.voor);
+  else if (act === 'watals-preset') watAlsVoorbeeld(t.dataset.p);
+  else if (act === 'watals-reset') { S.ins = Object.assign({}, ins(), { watAls: {} }); bewaarIns(true); $('#view').innerHTML = viewWatAls(); }
   else if (act === 'prijzen-ophalen') prijzenOphalen(true);
   else if (act === 'prijzen-form') openPrijzenForm();
   else if (act === 'backup-maken') backupMaken();
@@ -2832,7 +3097,11 @@ document.addEventListener('click', ev => {
   else if (act === 'import-nee') { backupWacht = null; S.bevestig = null; render(); }
 });
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && blad) sluitBlad(); });
-document.addEventListener('input', ev => { if (ev.target.id !== 'logo-input' && ev.target.closest && ev.target.closest('#koppelform')) leesKoppelForm(); });
+document.addEventListener('input', ev => {
+  if (!ev.target.closest) return;
+  if (ev.target.id !== 'logo-input' && ev.target.closest('#koppelform')) leesKoppelForm();
+  if (ev.target.closest('#watalsform')) leesWatAls();
+});
 document.addEventListener('change', ev => {
   if (ev.target.id === 'logo-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; logoKiezen(file); return; }
   if (ev.target.id === 'backup-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; backupLezen(file); return; }
