@@ -1,5 +1,5 @@
-"""Haalt de nieuwste voederwaardeprijzen (WUR) en de FrieslandCampina-garantieprijs op
-en werkt prijzen.json bij. Draait in GitHub Actions (zie .github/workflows/publiceren.yml).
+"""Haalt de nieuwste voederwaardeprijzen (WUR), de FrieslandCampina-garantieprijs en de
+notering van fosfaatrechten (fosfaatrecht.nu) op en werkt prijzen.json bij. Draait in GitHub Actions (zie .github/workflows/publiceren.yml).
 
 Gebruik: python scripts/prijzen_bijwerken.py prijzen.json
 Exitcode 0 = gelukt (ook als er niets nieuws was), 1 = een bron kon niet gelezen worden.
@@ -14,6 +14,10 @@ from zoneinfo import ZoneInfo
 
 WUR_PAGINA = "https://www.wur.nl/nl/onderzoek/producten-diensten/voederwaardeprijzen-rundvee"
 FC_PAGINA = "https://www.frieslandcampina.com/nl/eigendom-van-boeren/garantieprijs/"
+FOSFAAT_PAGINA = "https://fosfaatrecht.nu/prijs-fosfaatrechten-100-leverbaar/"
+# Beginpunten voor het verloop (februari: ca. 125 euro volgens Nieuwe Oogst, 29-10-2026)
+FOSFAAT_START = [{"datum": "2026-02-15", "koop100": 125.0, "ca": True},
+                 {"datum": "2026-10-25", "koop100": 345.0, "koop0": 218.0, "lease": 80.0}]
 MAANDEN = ["januari", "februari", "maart", "april", "mei", "juni", "juli",
            "augustus", "september", "oktober", "november", "december"]
 HEADERS = {"User-Agent": "Mozilla/5.0 (rantsoen-app prijzen-update)"}
@@ -129,10 +133,52 @@ def fc_uit_tekst(tekst):
             "vetwaarde": vetwaarde, "stdEiwit": std_eiwit, "stdVet": std_vet, "bron": FC_PAGINA}
 
 
+# ---------- Fosfaatrechten ----------
+def fosfaat_uit_tekst(tekst):
+    t = re.sub(r"\s+", " ", tekst)
+
+    def prijs(label, lo, hi):
+        m = re.search(label + r"[^€]{0,80}€\s*(\d{1,3}(?:\.\d{3})*,\d{2})", t, flags=re.I)
+        if not m:
+            return None
+        w = getal(m.group(1))
+        return w if lo < w < hi else None
+
+    koop100 = prijs(r"fosfaatrechten 100\s?%", 20, 2000)
+    if koop100 is None:
+        raise ValueError("koopprijs fosfaatrechten 100% niet gevonden")
+    koop0 = prijs(r"fosfaatrechten 0\s?%", 5, 2000)
+    lease = prijs(r"leaserechten", 2, 1000)
+    d = re.search(r"Laatst gewijzigd:?\s*(\d{1,2})-(\d{1,2})-(20\d\d)", t, flags=re.I)
+    if d:
+        datum = f"{d.group(3)}-{int(d.group(2)):02d}-{int(d.group(1)):02d}"
+    else:
+        datum = dt.datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+    uit = {"datum": datum, "koop100": koop100, "bron": FOSFAAT_PAGINA}
+    if koop0 is not None:
+        uit["koop0"] = koop0
+    if lease is not None:
+        uit["lease"] = lease
+    return uit
+
+
 # ---------- Samenvoegen ----------
-def samenvoegen(oud, wur=None, melk=None):
+def samenvoegen(oud, wur=None, melk=None, fosfaat=None):
     nieuw = json.loads(json.dumps(oud))
     veranderd = False
+    if fosfaat:
+        vorige = oud.get("fosfaat") or {"datum": "", "historie": FOSFAAT_START}
+        velden = ("koop100", "koop0", "lease")
+        anders = any(fosfaat.get(k) != vorige.get(k) for k in velden)
+        if fosfaat["datum"] > vorige.get("datum", "") or anders:
+            if fosfaat["datum"] <= vorige.get("datum", ""):
+                # prijs gewijzigd zonder nieuwe datum op de pagina: neem vandaag
+                fosfaat["datum"] = dt.datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+            hist = {h["datum"]: h for h in vorige.get("historie", [])}
+            hist[fosfaat["datum"]] = {"datum": fosfaat["datum"], **{k: fosfaat[k] for k in velden if k in fosfaat}}
+            fosfaat["historie"] = [hist[k] for k in sorted(hist)][-40:]
+            nieuw["fosfaat"] = fosfaat
+            veranderd = True
     if wur and wur["datum"] > oud.get("wur", {}).get("datum", ""):
         hist = {h["datum"]: h for h in oud.get("wur", {}).get("historie", [])}
         for h in wur.get("historie", []):
@@ -181,7 +227,15 @@ def main(pad):
         print(f"Melkprijs {melk['maand']}: € {melk['garantieprijs']}")
     except Exception as e:  # noqa: BLE001
         fouten.append(f"FrieslandCampina: {e}")
-    nieuw, veranderd = samenvoegen(oud, wur, melk)
+    fosfaat = None
+    try:
+        pagina = requests.get(FOSFAAT_PAGINA, headers=HEADERS, timeout=60)
+        pagina.raise_for_status()
+        fosfaat = fosfaat_uit_tekst(html_naar_tekst(pagina.text))
+        print(f"Fosfaatrechten {fosfaat['datum']}: koop € {fosfaat['koop100']}, lease € {fosfaat.get('lease')}")
+    except Exception as e:  # noqa: BLE001
+        fouten.append(f"Fosfaatrechten: {e}")
+    nieuw, veranderd = samenvoegen(oud, wur, melk, fosfaat)
     if veranderd:
         with open(pad, "w", encoding="utf-8") as f:
             json.dump(nieuw, f, ensure_ascii=False, indent=1)
