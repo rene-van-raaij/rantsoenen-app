@@ -1119,8 +1119,9 @@ if (typeof module !== "undefined") module.exports = { mestRefVastleggen, reP, me
 <script>
 'use strict';
 const STANDALONE = true; // wordt bij het bouwen van de losse app op true gezet
-const APP_VERSIE = '1.6';
+const APP_VERSIE = '1.6.1';
 const WIJZIGINGEN = [
+  ['1.6.1', '2026-11-01', 'Uitgebreide uitleg bij de pensbalans (OEB): wat het is, eiwit en OEB per voer, en hoe je meer graskuil in het advies krijgt.'],
   ['1.6', '2026-11-01', 'Mestafvoer: stikstof en fosfaat in de mest per rantsoen, kosten van mestafvoer in het advies, de grafiek, Vergelijk en Wat als. Rantsoengeschiedenis (bewaren, vergelijken, terugzetten) en bewaarde scenario\'s. Prijzen van fosfaatrechten en mestafzet met verloop.'],
   ['1.5', '2026-11-01', 'Tabblad Wat als: scenario\'s voor melk, gehaltes, koeien, melkprijs en fosfaatrechten, en wat 0,1% eiwit of vet waard is. Versienummer en dit overzicht.'],
   ['1.4', '2026-11-01', 'Fosfaatrechten (RVO-tabel 2026), grens voor zetmeel en suiker, voorraadplanning per voer. Grafiek meer melk rekent fosfaat mee.'],
@@ -2226,14 +2227,48 @@ function uitlegDve() {
 }
 
 function uitlegOeb() {
-  const { R, naam } = huidigOfAdvies();
-  const B = R.B;
+  const { A, R, naam } = huidigOfAdvies();
+  const B = R.B, i = A.i;
+  const opMax = Math.abs(R.T.oeb - B.oebMax) < 3;
+  const M = mestInstellingen(i);
+  // DVE en OEB per voer: hoeveel OEB komt er mee met 100 g eiwit?
+  const voeders = gesorteerd().filter(v => v.soort !== 'mineraal' && v.actief !== false);
+  const rijen = voeders.map(v => {
+    const dve = num(v.dve, 0), oeb = num(v.oeb, 0);
+    return `<tr><td>${esc(v.naam)}</td><td class="n">${n(dve)}</td><td class="n">${n(oeb)}</td><td class="n">${dve > 0 ? n(oeb / dve * 100) : '–'}</td></tr>`;
+  }).join('');
+  // graskuil die in het advies op 0 staat
+  const grasNul = A.O ? voeders.filter(v => /gras/.test(normNaam(v.naam)) && (A.O.kgDs[v.id] || 0) < 0.05) : [];
   return `${bladKop('Pensbalans (OEB)')}
-    <p>OEB geeft aan of er in de pens genoeg eiwit is voor de energie die er wordt afgebroken. Onder 0 krijgen de pensbacteriën te weinig eiwit; ver boven 0 gaat eiwit verloren via de urine (en kost het stikstof op de mestbalans).</p>
-    <p>De app houdt de OEB tussen <b>${n(B.oebMin)}</b> en <b>${n(B.oebMax)} g</b> per koe per dag. Die grenzen pas je aan bij Bedrijf → Normen voor het advies.</p>
-    <h3>OEB in ${naam}: ${n(R.T.oeb)} g</h3>
+    <p><b>OEB</b> staat voor Onbestendige Eiwit Balans. Het zegt of de bacteriën in de pens genoeg eiwit hebben voor de energie die ze krijgen.</p>
+    <h3>Wat er in de pens gebeurt</h3>
+    <p>De pensbacteriën breken een groot deel van het eiwit uit het voer af tot ammoniak (stikstof). Met die stikstof en met de energie uit het voer bouwen ze hun eigen eiwit. Daarna gaan de bacteriën door naar de darm; daar zijn ze de belangrijkste eiwitbron van de koe. Zie de bacteriën als bouwvakkers: ze hebben stenen nodig (stikstof uit eiwit) en brandstof (energie).</p>
+    <p class="som">OEB = eiwit dat in de pens wordt afgebroken − eiwit dat de bacteriën met de beschikbare energie kunnen vastleggen</p>
+    <ul>
+      <li><b>OEB onder 0:</b> te weinig stikstof voor de energie. De bacteriën groeien minder en verteren de vezels slechter. Een klein tekort vangt de koe op door ureum terug te sturen naar de pens, maar volgens de CVB-norm moet de OEB van het rantsoen minimaal 0 zijn.</li>
+      <li><b>OEB boven 0:</b> meer stikstof dan de bacteriën gebruiken. Het overschot wordt in de lever ureum en gaat met de urine weg. Dat levert de koe niets op, kost haar wat energie en geeft een hoger ureumgetal in de melk, meer stikstof in de mest en meer ammoniak.</li>
+    </ul>
+    <p>Iets boven 0 is dus goed; veel hoger heeft geen zin${M.actief ? ' en kost via de mestafvoer ook geld' : ''}.</p>
+    <p class="small muted">Het verschil met DVE: DVE is het eiwit dat de koe in de darm opneemt en gebruikt voor melk en onderhoud (bacterie-eiwit plus voereiwit dat de pens onafgebroken passeert). OEB zegt alleen of de pens in balans is. Een rantsoen moet aan allebei voldoen.</p>
+    <h3>OEB in ${naam}: ${n(R.T.oeb)} g per koe per dag</h3>
     ${bijdrageTabel(R, 'oeb', ' g', 0)}
-    <p class="small muted">Maïskuil en granen hebben een negatieve OEB, graskuil en eiwitrijke voeders een positieve. Het aandeel is een deel van de som; bij negatieve waarden is het minder zinvol.</p>`;
+    <p class="small muted">Per voer: kg droge stof × OEB per kg DS (van de kuilanalyse of het productblad). Maïskuil en granen hebben een negatieve OEB en halen het totaal omlaag; graskuil en eiwitrijke voeders hebben een positieve. Daarom vullen gras en maïs elkaar in een winterrantsoen goed aan. Het aandeel is minder zinvol bij negatieve waarden.</p>
+    <h3>De grenzen in de app</h3>
+    <p>Het advies houdt de OEB tussen <b>${n(B.oebMin)}</b> en <b>${n(B.oebMax)} g</b> per koe per dag. Die grenzen staan bij Bedrijf → Normen voor het advies. De ondergrens van 0 is de CVB-norm. De standaard-bovengrens van 400 g is een ruime veiligheidsgrens die in de app is gekozen; het is geen officiële norm.</p>
+    ${opMax ? `<div class="melding let"><span class="stip"></span><div>${naam.charAt(0).toUpperCase() + naam.slice(1)} zit tegen de bovengrens van ${n(B.oebMax)} g aan. Dan kiest de app het eiwit (DVE) dat de minste OEB meebrengt.</div></div>` : ''}
+    <h3>Eiwit en OEB per voer</h3>
+    <p>De koe heeft eiwit (DVE) nodig, en elk eiwitrijk voer brengt ook OEB mee. Hoe minder OEB per 100 g DVE, hoe beter een voer onder de bovengrens past.</p>
+    <div class="tabel-wrap"><table class="rt uitleg-tabel"><thead><tr><th>Voer (per kg DS)</th><th>DVE g</th><th>OEB g</th><th>OEB per 100 g DVE</th></tr></thead><tbody>${rijen}</tbody></table></div>
+    ${grasNul.length ? `<h3>Waarom geen ${esc(grasNul[0].naam)}?</h3>
+      <p>${esc(grasNul[0].naam)} levert ${n(num(grasNul[0].dve, 0))} g DVE en ${n(num(grasNul[0].oeb, 0))} g OEB per kg DS, en ${n(num(grasNul[0].vem, 0))} VEM. ${opMax ? 'Het advies zit al tegen de OEB-bovengrens. Met graskuil zou de OEB verder stijgen, terwijl andere voeders hetzelfde eiwit met minder OEB leveren. ' : ''}Tik bij het rantsoen op ${esc(grasNul[0].naam)} om te zien of de prijs of de normen de reden zijn.</p>
+      <p>Om meer ${esc(grasNul[0].naam)} in het advies te krijgen (bijvoorbeeld om te testen):</p>
+      <ul>
+        <li><b>Zet de bovengrens van de OEB omhoog</b> bij Bedrijf, bijvoorbeeld naar 600 g. Niet de ondergrens: die moet 0 blijven. Een hogere grens betekent wel meer stikstof in de urine en de mest.</li>
+        ${M.meewegen ? '<li><b>Zet "Mestkosten meewegen" even uit</b> bij Bedrijf → Mest. Graskuil heeft veel ruw eiwit en geeft daardoor veel stikstof in de mest; met mestkosten telt het extra zwaar.</li>' : ''}
+        <li><b>Of stel een minimum in</b> bij Voeders → ${esc(grasNul[0].naam)}, of vul de voorraad in met "Moet op zijn op die datum". Dat is de directe manier: de app rekent de rest van het rantsoen daaromheen.</li>
+        <li><b>Vul de echte kuilanalyse in.</b> Een kuil met een lagere OEB past veel beter dan de standaardwaarden.</li>
+      </ul>` : ''}
+    <p class="small muted">Controle in de praktijk: het ureumgetal op de MPR-uitslag of de tankmelkuitslag. Hoog ureum wijst meestal op een (te) hoge OEB. Bespreek met jullie voeradviseur welke bovengrens bij jullie bedrijf past.</p>`;
 }
 
 function uitlegSw() {
@@ -2768,13 +2803,13 @@ function viewKoppel() {
       <div class="velden">
         ${veld('dsOpname', 'Droge-stofopname', i.dsAuto !== false ? Math.round(dsAutoVoor(num(i.melk, 28)) * 10) / 10 : i.dsOpname, 'kg DS per koe per dag', '', i.dsAuto !== false ? ' readonly' : '')}
         ${veld('swMin', 'Structuurwaarde minimaal', i.swMin, 'per kg DS')}
-        ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag', '', '', true)}
-        ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag', '', '', true)}
+        ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag (CVB-norm: 0)', '', '', true)}
+        ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag; hoger geeft meer ruimte voor graskuil en meer stikstof in de mest', '', '', true)}
         ${veld('vemMarge', 'Energie boven behoefte', i.vemMarge, '% dat maximaal mag')}
         ${veld('zsMax', 'Zetmeel + suiker maximaal', i.zsMax, 'g per kg DS; leeg = geen grens')}
         ${veld('suikerMax', 'Suiker maximaal', i.suikerMax, 'g per kg DS; leeg = geen grens')}
       </div>
-      <p class="small muted">Waarom deze grenzen? ${uitlegKnop('zs', '', 'zetmeel en suiker')}</p>
+      <p class="small muted">Wat betekenen deze grenzen? OEB ${uitlegKnop('oeb', '', 'pensbalans OEB')} · zetmeel en suiker ${uitlegKnop('zs', '', 'zetmeel en suiker')}</p>
       <label class="vink"><input type="checkbox" id="k-jeugd" name="jeugd"${i.jeugd !== false ? ' checked' : ''}${ro}> Toeslag jeugdgroei (330 VEM, 37 g DVE, koppelgemiddelde)</label>
       <div class="velden">
         ${veld('extraVem', 'Extra toeslag VEM', i.extraVem, 'bijv. dracht', '', '', true)}
