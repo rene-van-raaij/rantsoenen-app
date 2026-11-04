@@ -1,18 +1,4 @@
-<!doctype html>
-<html lang="nl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1F3A2A">
-<meta name="description" content="Rantsoenrekenaar voor melkvee: voersaldo, kuilanalyses en bedrijfsvergelijking. Gegevens blijven op de telefoon.">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png" type="image/png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Rantsoen">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#1F3A2A"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Rantsoen"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Rantsoen &amp; Voersaldo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -412,8 +398,6 @@ details.uitleg[open] summary { margin-bottom: 8px; }
   @keyframes omhoog { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
 }
 </style>
-</head>
-<body>
 
 <div class="app">
   <header class="kop" id="kop">
@@ -455,14 +439,31 @@ function num(v, d) {
 
 function fpcmFactor(vet, eiwit) { return 0.337 + 0.116 * vet + 0.06 * eiwit; }
 
-function dsAutoVoor(melk) { return 13.5 + 0.25 * melk; }
+// Rassen: alleen een startwaarde voor het lichaamsgewicht. De normen (CVB) rekenen met gewicht en productie, niet met ras.
+const RASSEN = {
+  holstein: { naam: 'Holstein-Friesian', kort: 'Holstein', lg: 680 },
+  mrij: { naam: 'MRIJ (Maas-Rijn-IJssel)', kort: 'MRIJ', lg: 700 },
+  fh: { naam: 'Fries-Hollands', kort: 'Fries-Hollands', lg: 600 },
+  jersey: { naam: 'Jersey', kort: 'Jersey', lg: 450 },
+  kruising: { naam: 'Kruislingen', kort: 'kruislingen', lg: 600 },
+  anders: { naam: 'Ander ras', kort: '', lg: null },
+};
+const KV_MAX_ADVIES = 45; // % krachtvoer in de droge stof: veilige bovengrens voor hoogproductieve koeien
+const DS_LG_REF = 675, DS_PER_KG_LG = 0.012, DS_VAARS_MINDER = 0.10;
+
+// Opnamecapaciteit: Handboek Melkveehouderij (koe van ca. 675 kg), gecorrigeerd voor gewicht en aandeel vaarzen
+function dsAutoVoor(melk, ins) {
+  const lg = num(ins && ins.lg, DS_LG_REF);
+  const vaarzen = Math.min(100, Math.max(0, num(ins && ins.vaarzen, 0))) / 100;
+  return (13.5 + 0.25 * melk + DS_PER_KG_LG * (lg - DS_LG_REF)) * (1 - DS_VAARS_MINDER * vaarzen);
+}
 
 function dsOpname(ins, melk) {
   if (ins.dsAuto === false) {
-    const zelf = num(ins.dsOpname, dsAutoVoor(num(ins.melk, 28)));
-    return zelf + (dsAutoVoor(melk) - dsAutoVoor(num(ins.melk, 28)));
+    const zelf = num(ins.dsOpname, dsAutoVoor(num(ins.melk, 28), ins));
+    return zelf + (dsAutoVoor(melk, ins) - dsAutoVoor(num(ins.melk, 28), ins));
   }
-  return dsAutoVoor(melk);
+  return dsAutoVoor(melk, ins);
 }
 
 function behoefte(ins, melk, dichtheid) {
@@ -485,6 +486,7 @@ function behoefte(ins, melk, dichtheid) {
     vemMax: vem * (1 + num(ins.vemMarge, 5) / 100),
     zsMax: num(ins.zsMax, Infinity) > 0 ? num(ins.zsMax, Infinity) : Infinity,
     suikerMax: num(ins.suikerMax, Infinity) > 0 ? num(ins.suikerMax, Infinity) : Infinity,
+    kvMax: num(ins.kvMax, Infinity) > 0 && num(ins.kvMax, Infinity) < 100 ? num(ins.kvMax, Infinity) : Infinity,
   };
 }
 
@@ -850,6 +852,7 @@ const NORM_REGELS = [
   { key: 'vemMax', op: '<=', straf: 20 },
   { key: 'zs', op: '<=', straf: 80 },
   { key: 'suiker', op: '<=', straf: 50 },
+  { key: 'kv', op: '<=', straf: 80 },
 ];
 
 function voerVariabelen(voeders) {
@@ -878,13 +881,14 @@ function losRantsoen(vars, B, ins) {
     sw: vars.map(v => num(v.sw, 0) - B.swMin),
     zs: vars.map((v, i) => (zs[i].zs - B.zsMax) / 1000),
     suiker: vars.map((v, i) => (zs[i].suiker - B.suikerMax) / 1000),
+    kv: vars.map(v => (v.soort === 'krachtvoer' ? 1 : 0) - B.kvMax / 100),
   };
   const rhs = {
     vem: B.vem / 1000, vemMax: B.vemMax / 1000, dve: B.dve / 100,
     oebMin: B.oebMin / 100, oebMax: B.oebMax / 100,
-    dsMax: B.dsMax, dsMin: B.dsMin, sw: 0, zs: 0, suiker: 0,
+    dsMax: B.dsMax, dsMin: B.dsMin, sw: 0, zs: 0, suiker: 0, kv: 0,
   };
-  const regels = NORM_REGELS.filter(r => !(r.key === 'zs' && !Number.isFinite(B.zsMax)) && !(r.key === 'suiker' && !Number.isFinite(B.suikerMax)));
+  const regels = NORM_REGELS.filter(r => !(r.key === 'zs' && !Number.isFinite(B.zsMax)) && !(r.key === 'suiker' && !Number.isFinite(B.suikerMax)) && !(r.key === 'kv' && !Number.isFinite(B.kvMax)));
   const K = regels.length;
   const c = vars.map(v => prijsPerKgDs(v) + mestLPKosten(v, ins)).concat(regels.map(r => r.straf));
   const rows = [];
@@ -908,7 +912,7 @@ function losRantsoen(vars, B, ins) {
 }
 
 function totalen(voeders, kgDsMap) {
-  let ds = 0, vem = 0, dve = 0, oeb = 0, swSom = 0, kosten = 0, zsSom = 0, suikerSom = 0;
+  let ds = 0, vem = 0, dve = 0, oeb = 0, swSom = 0, kosten = 0, zsSom = 0, suikerSom = 0, kvDs = 0;
   const onbekend = [], geschat = [];
   voeders.forEach(v => {
     if (v.soort === 'mineraal') { kosten += mineraalKosten(v); return; }
@@ -919,10 +923,12 @@ function totalen(voeders, kgDsMap) {
     ds += x; vem += x * num(v.vem, 0); dve += x * num(v.dve, 0); oeb += x * num(v.oeb, 0);
     swSom += x * num(v.sw, 0); kosten += x * prijsPerKgDs(v);
     zsSom += x * w.zs; suikerSom += x * w.suiker;
+    if (v.soort === 'krachtvoer') kvDs += x;
   });
   return {
     ds, vem, dve, oeb, sw: ds > 0 ? swSom / ds : 0, kosten, dichtheid: ds > 0 ? vem / ds : 970,
     zs: ds > 0 ? zsSom / ds : 0, suiker: ds > 0 ? suikerSom / ds : 0, zsOnbekend: onbekend, zsGeschat: geschat,
+    kvDs, kv: ds > 0 ? kvDs / ds * 100 : 0,
   };
 }
 
@@ -938,6 +944,7 @@ function toets(T, B) {
   if (T.ds < B.dsMin - 0.05) p.push({ key: 'dsMin', ernst: 'let', tekst: `Weinig droge stof (${fmt1(T.ds)} kg): pens raakt niet gevuld` });
   if (T.ds > 0 && T.sw < B.swMin - 0.02) p.push({ key: 'sw', ernst: 'kritiek', tekst: `Te weinig structuur (${fmt2(T.sw)} per kg DS, minimaal ${fmt2(B.swMin)})` });
   if (T.ds > 0 && Number.isFinite(B.zsMax) && T.zs > B.zsMax + 2) p.push({ key: 'zs', ernst: 'kritiek', tekst: `Te veel zetmeel en suiker (${r0(T.zs)} g per kg DS, maximaal ${r0(B.zsMax)})` });
+  if (T.ds > 0 && Number.isFinite(B.kvMax) && T.kv > B.kvMax + 0.5) p.push({ key: 'kv', ernst: 'kritiek', tekst: `Te veel krachtvoer (${r0(T.kv)}% van de droge stof, maximaal ${r0(B.kvMax)}%)` });
   if (T.ds > 0 && Number.isFinite(B.suikerMax) && T.suiker > B.suikerMax + 2) p.push({ key: 'suiker', ernst: 'let', tekst: `Veel suiker (${r0(T.suiker)} g per kg DS, maximaal ${r0(B.suikerMax)})` });
   return p;
 }
@@ -1278,14 +1285,16 @@ function saldoCurve(voeders, ins, melkPrijzen) {
   return pts;
 }
 
-if (typeof module !== "undefined") module.exports = { waardeInRantsoen, gevoerdOp, gevoerdPerKoe, gevoerdeVoeders, datumPlus, gevoerdGemiddeld, parseCsv, parseDatum, raadDatumNotatie, parseGewicht, csvNaarDagen, mestRefVastleggen, reP, mestInstellingen, mestLPKosten, uitscheiding, mestReferentie, mestBeeld, scenarioIns, scenarioUitkomst, waardeVan, voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
+if (typeof module !== "undefined") module.exports = { RASSEN, dsAutoVoor, waardeInRantsoen, gevoerdOp, gevoerdPerKoe, gevoerdeVoeders, datumPlus, gevoerdGemiddeld, parseCsv, parseDatum, raadDatumNotatie, parseGewicht, csvNaarDagen, mestRefVastleggen, reP, mestInstellingen, mestLPKosten, uitscheiding, mestReferentie, mestBeeld, scenarioIns, scenarioUitkomst, waardeVan, voerGrenzen, zsWaarden, zsSchatting, fosfaatBeeld, fosfaatKlasse, forfaitFosfaat, dagenTot,  behoefte, optimaal, huidigRantsoen, economie, saldoCurve, simplex, melkUitVem, melkUitDve, voederwaardePrijs, prijsPerTonProduct, prijsPerKgDs, melkprijsPerKg, totalen, voerAnalyse, voerBijPrijs, schaduwPrijzen };
 
 </script>
 <script>
 'use strict';
-const STANDALONE = true; // wordt bij het bouwen van de losse app op true gezet
-const APP_VERSIE = '1.7';
+const STANDALONE = true; // losse app
+const APP_VERSIE = '1.8';
 const WIJZIGINGEN = [
+  ['1.8', '2026-11-04', 'Ras van het koppel (zoals Holstein) en het aandeel vaarzen: de geschatte droge-stofopname houdt nu rekening met het lichaamsgewicht en de vaarzen. Nieuwe grens voor het aandeel krachtvoer in de droge stof.'],
+  ['1.7.1', '2026-11-01', 'Prijzen zelf invullen kan nu ook in de Claude-versie, en ook de notering van fosfaatrechten. Zelf ingevulde prijzen laten het productoverzicht en de fosfaatprijzen voortaan staan.'],
   ['1.7', '2026-11-01', 'Mengwagen: werkelijk gevoerde hoeveelheden invullen (blijven staan tot je ze verandert) of inlezen uit een CSV-export (zoals FeedLink), vergeleken met het huidige rantsoen en het advies. Productoverzicht van Van Vulpen met per product de prijs waaronder het in jullie rantsoen past.'],
   ['1.6.1', '2026-11-01', 'Uitgebreide uitleg bij de pensbalans (OEB): wat het is, eiwit en OEB per voer, en hoe je meer graskuil in het advies krijgt.'],
   ['1.6', '2026-11-01', 'Mestafvoer: stikstof en fosfaat in de mest per rantsoen, kosten van mestafvoer in het advies, de grafiek, Vergelijk en Wat als. Rantsoengeschiedenis (bewaren, vergelijken, terugzetten) en bewaarde scenario\'s. Prijzen van fosfaatrechten en mestafzet met verloop.'],
@@ -1339,7 +1348,7 @@ const STANDAARD_INS = {
   koeien: 100, melk: 28, vet: 4.4, eiwit: 3.6, lg: 675, beweiding: 'stal', toeslag: 0,
   dsAuto: true, dsOpname: 20.5, swMin: 1.0, oebMin: 0, oebMax: 400, vemMarge: 5,
   jeugd: true, extraVem: 0, extraDve: 0,
-  zsMax: 250, suikerMax: 100,
+  zsMax: 250, suikerMax: 100, ras: '', vaarzen: '', kvMax: '',
   fosfaatrechten: '', koeienTotaal: '', jaarMelk: '', kalveren: '', pinken: '', fosfaatPrijs: 118,
   mestAfvoer: '', mestPrijs: '', mestBeperkend: 'N', mestN: 4.0, mestP: 1.5, mestVerlies: 15, mestMeewegen: true,
 };
@@ -1583,10 +1592,10 @@ function registreerSW() {
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 function openPrijzenForm() {
-  const P = prijzen(), w = P.wur, m = P.melk, mv = w.mengvoer || {};
+  const P = prijzen(), w = P.wur, m = P.melk, fo = P.fosfaat, mv = w.mengvoer || {};
   const veld = (id, label, waarde, hint, type = 'text') => `<div class="veld" data-veld="${id}"><label for="p-${id}">${label}</label><input id="p-${id}" name="${id}" ${type === 'text' ? 'inputmode="decimal"' : `type="${type}"`} autocomplete="off" value="${esc(type === 'text' ? invoer(waarde) : (waarde || ''))}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
   openBlad(`${bladKop('Prijzen invullen')}
-    <p class="small muted">Neem de getallen over van de <a href="${BRON_WUR}" target="_blank" rel="noopener">WUR-pagina</a> en de <a href="${BRON_FC}" target="_blank" rel="noopener">Campina-garantieprijs</a>.</p>
+    <p class="small muted">Neem de getallen over van de <a href="${BRON_WUR}" target="_blank" rel="noopener">WUR-pagina</a>, de <a href="${BRON_FC}" target="_blank" rel="noopener">Campina-garantieprijs</a> en <a href="${BRON_FOSFAAT}" target="_blank" rel="noopener">fosfaatrecht.nu</a>.${STANDALONE ? '' : ' De prijzen gelden voor iedereen die deze app opent. De geplande taak overschrijft ze alleen als er een nieuwere publicatie is.'}</p>
     <form class="form" id="prijsform" novalidate>
       <fieldset><legend>Voederwaardeprijzen WUR</legend><div class="velden">
         ${veld('wdatum', 'Datum', w.datum, '', 'date')}
@@ -1603,6 +1612,11 @@ function openPrijzenForm() {
         ${veld('stde', 'Standaard eiwit', m.stdEiwit, '%')}
         ${veld('stdv', 'Standaard vet', m.stdVet, '%')}
       </div></fieldset>
+      <fieldset><legend>Fosfaatrechten (notering)</legend><div class="velden">
+        ${veld('fdatum', 'Datum', fo.datum, '', 'date')}
+        ${veld('fkoop', 'Koop (100% leverbaar)', fo.koop100, '€ per kg fosfaat')}
+        ${veld('flease', 'Lease', fo.lease, '€ per kg fosfaat')}
+      </div></fieldset>
       <div class="blad-voet"><button type="submit" class="btn prim">Opslaan</button><button type="button" class="btn" data-act="sluit">Annuleren</button></div>
     </form>`, b => {
     const f = b.querySelector('#prijsform');
@@ -1618,6 +1632,9 @@ function openPrijzenForm() {
       check('garantie', g('garantie') > 10 && g('garantie') < 150, 'Vul de garantieprijs in.');
       check('eiwitw', g('eiwitw') > 100, 'Vul de eiwitwaarde in.');
       check('vetw', g('vetw') > 100, 'Vul de vetwaarde in.');
+      check('fdatum', /^\d{4}-\d{2}-\d{2}$/.test(f.elements.fdatum.value), 'Kies een datum.');
+      check('fkoop', g('fkoop') > 20 && g('fkoop') < 2000, 'Vul de koopprijs per kg in.');
+      check('flease', f.elements.flease.value.trim() === '' || (g('flease') > 2 && g('flease') < 1000), 'Vul de leaseprijs per kg in of laat leeg.');
       if (fouten.length) return;
       const wd = f.elements.wdatum.value, md = f.elements.maand.value;
       const wurHist = (w.historie || []).filter(h => h.datum !== wd).concat([{ datum: wd, kvem: g('kvem'), dve: g('dve') }]).sort((a, c) => a.datum < c.datum ? -1 : 1).slice(-12);
@@ -1625,13 +1642,22 @@ function openPrijzenForm() {
       const mengvoer = Object.assign({}, mv);
       if (Number.isFinite(g('m120'))) mengvoer['120'] = g('m120');
       if (Number.isFinite(g('m180'))) mengvoer['180'] = g('m180');
-      S.prijzen = {
+      const fd = f.elements.fdatum.value;
+      const fPunt = { datum: fd, koop100: g('fkoop') };
+      if (Number.isFinite(g('flease'))) fPunt.lease = g('flease');
+      if (fd === fo.datum && Number.isFinite(fo.koop0)) fPunt.koop0 = fo.koop0;
+      const fHist = (fo.historie || []).filter(h => h.datum !== fd).concat([fPunt]).sort((a, c) => a.datum < c.datum ? -1 : 1).slice(-40);
+      const laatsteF = fHist[fHist.length - 1];
+      // Bestaande gegevens (zoals het productoverzicht) blijven staan
+      S.prijzen = Object.assign({}, S.prijzen || {}, {
         wur: Object.assign({}, w, { datum: wd, kvem: g('kvem'), dveToeslag: g('dve'), mengvoer, historie: wurHist, volgende: wd === w.datum ? w.volgende : '' }),
         melk: Object.assign({}, m, { maand: md, garantieprijs: g('garantie'), eiwitwaarde: g('eiwitw'), vetwaarde: g('vetw'), stdEiwit: num(f.elements.stde.value, m.stdEiwit), stdVet: num(f.elements.stdv.value, m.stdVet), integraal: md === m.maand ? m.integraal : null, historie: melkHist }),
+        fosfaat: Object.assign({}, fo, laatsteF, { historie: fHist, bron: fo.bron || BRON_FOSFAAT }),
         bijgewerkt: new Date().toISOString(),
-      };
-      prijzenBewaren();
-      sluitBlad(); toast('Prijzen opgeslagen'); render();
+      });
+      if (S.modus === 'db') schrijf('prijzen/actueel', JSON.parse(JSON.stringify(S.prijzen))).then(() => toast('Prijzen opgeslagen voor iedereen')).catch(() => {});
+      else { prijzenBewaren(); toast('Prijzen opgeslagen'); }
+      sluitBlad(); render();
     });
   });
 }
@@ -1818,7 +1844,8 @@ function renderKop() {
   if (!b) { zet(el, ''); zet(bk, ''); return; }
   zet(bk, `<button class="bedrijfknop" data-act="kies-bedrijf" aria-label="Bedrijf wisselen, nu ${esc(b.naam)}">${logoHtml(b)}<span class="bk-tekst"><span class="bnaam">${esc(b.naam || 'Naamloos bedrijf')}</span><span class="wissel">${S.bedrijven.length > 1 ? `Wissel van bedrijf (${S.bedrijven.length})` : 'Bedrijf toevoegen of wisselen'}</span></span></button>`);
   const i = ins();
-  zet(el, `<span><b>${n(num(i.koeien, 0))}</b> koeien</span><span><b>${n(num(i.melk, 0), 1)}</b> kg melk</span><span><b>${n(num(i.vet, 0), 2)}%</b> vet</span><span><b>${n(num(i.eiwit, 0), 2)}%</b> eiwit</span>${S.tab !== 'bedrijf' && S.kanSchrijven ? '<button data-act="naar-koppel">Wijzig</button>' : ''}`);
+  const rasKort = RASSEN[i.ras] && RASSEN[i.ras].kort;
+  zet(el, `${rasKort ? `<span><b>${esc(rasKort)}</b></span>` : ''}<span><b>${n(num(i.koeien, 0))}</b> koeien</span><span><b>${n(num(i.melk, 0), 1)}</b> kg melk</span><span><b>${n(num(i.vet, 0), 2)}%</b> vet</span><span><b>${n(num(i.eiwit, 0), 2)}%</b> eiwit</span>${S.tab !== 'bedrijf' && S.kanSchrijven ? '<button data-act="naar-koppel">Wijzig</button>' : ''}`);
 }
 
 function viewGeenBedrijf() {
@@ -2005,7 +2032,7 @@ let productCache = { sleutel: '', uitkomst: {} }, productRun = 0;
 function productSleutel() {
   const i = ins();
   return JSON.stringify([S.bedrijfId, S.voeders.map(v => [v.id, v.prijs, v.eenheid, v.ds, v.vem, v.dve, v.oeb, v.sw, v.re, v.p, v.zetmeel, v.suiker, v.min, v.max, v.actief, v.planType, v.voorraad, v.planDatum]),
-    ['melk', 'vet', 'eiwit', 'koeien', 'lg', 'beweiding', 'dsAuto', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'jeugd', 'extraVem', 'extraDve', 'zsMax', 'suikerMax', 'mestAfvoer', 'mestPrijs', 'mestBeperkend', 'mestN', 'mestP', 'mestVerlies', 'mestMeewegen'].map(k => i[k])]);
+    ['melk', 'vet', 'eiwit', 'koeien', 'lg', 'ras', 'vaarzen', 'kvMax', 'beweiding', 'dsAuto', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'jeugd', 'extraVem', 'extraDve', 'zsMax', 'suikerMax', 'mestAfvoer', 'mestPrijs', 'mestBeperkend', 'mestN', 'mestP', 'mestVerlies', 'mestMeewegen'].map(k => i[k])]);
 }
 function productUitkomst(pr) {
   const sl = productSleutel();
@@ -2501,6 +2528,7 @@ function tipBij(p) {
   if (p.key === 'vem') return ' Voeg een energierijk voer toe of verlaag de melkgift.';
   if (p.key === 'sw') return ' Meer stro of graskuil geeft meer structuur.';
   if (p.key === 'dsMax') return ' Gebruik voer met meer energie per kg droge stof.';
+  if (p.key === 'kv') return ' Meer ruwvoer of bijproducten, of verhoog de grens bij Bedrijf → Normen voor het advies.';
   return '';
 }
 
@@ -2510,7 +2538,7 @@ function normMeters(R) {
     const span = max - min;
     const pos = x => Math.max(0, Math.min(100, (x - min) / span * 100));
     const pilTekst = pil || { ok: 'goed', let: status === 'let' && waarde > bandTot ? 'hoog' : 'laag', kritiek: waarde < bandVan ? 'tekort' : 'te hoog' }[status];
-    const sleutel = { Energie: 'vem', Eiwit: 'dve', Pensbalans: 'oeb', 'Droge stof': 'ds', Structuur: 'sw', 'Zetmeel + suiker': 'zs' }[naam];
+    const sleutel = { Energie: 'vem', Eiwit: 'dve', Pensbalans: 'oeb', 'Droge stof': 'ds', Structuur: 'sw', 'Zetmeel + suiker': 'zs', Krachtvoer: 'kv' }[naam];
     return `<div class="norm" data-act="info" data-i="${sleutel}"><span class="nm"><span class="nm-naam">${naam}<small>${eenh}</small>${uitlegKnop(sleutel, '', naam)}</span><span class="pil ${status}">${pilTekst}</span></span><span class="wd">${waardeTekst}</span>
       <div class="meter" role="img" aria-label="${naam}: ${waardeTekst}, ${pilTekst}"><div class="band" style="left:${pos(bandVan)}%;width:${Math.max(1, pos(bandTot) - pos(bandVan))}%"></div><div class="vul ${status}" style="width:${pos(waarde)}%"></div></div></div>`;
   };
@@ -2524,12 +2552,15 @@ function normMeters(R) {
   const sZs = zsGrens && T.zs > B.zsMax + 2 ? 'kritiek' : Number.isFinite(B.suikerMax) && T.suiker > B.suikerMax + 2 ? 'let' : 'ok';
   const zsSchaal = Math.max(400, (zsGrens ? B.zsMax : 0) + 100, T.zs + 50);
   const oebMin = Math.min(-200, T.oeb - 50), oebMax = Math.max(B.oebMax + 200, T.oeb + 50);
+  const kvGrens = Number.isFinite(B.kvMax);
+  const sKv = kvGrens && T.kv > B.kvMax + 0.5 ? 'kritiek' : 'ok';
   return `<div class="normen">
     ${rij('Energie', 'VEM2022', `${n(pV)}% · ${n(T.vem)} van ${n(B.vem)}`, sV, 60, 130, 100, 100 + num(ins().vemMarge, 5), pV)}
     ${rij('Eiwit', 'DVE', `${n(pD)}% · ${n(T.dve)} van ${n(B.dve)} g`, sD, 60, 130, 100, 115, pD)}
     ${rij('Pensbalans', 'OEB', `${n(T.oeb)} g (${n(B.oebMin)} tot ${n(B.oebMax)})`, sO, oebMin, oebMax, B.oebMin, B.oebMax, T.oeb)}
     ${rij('Droge stof', 'opname', `${n(T.ds, 1)} kg (${n(B.dsMin, 1)} tot ${n(B.dsMax, 1)})`, sDs, 10, 30, B.dsMin, B.dsMax, T.ds)}
     ${rij('Structuur', 'SW per kg DS', `${n(T.sw, 2)} (minimaal ${n(B.swMin, 2)})`, sSw, 0, 3, B.swMin, 3, T.sw)}
+    ${rij('Krachtvoer', '% van de DS', `${n(T.kv)}%${kvGrens ? ` (max ${n(B.kvMax)}%)` : ' (geen grens)'}`, sKv, 0, 70, 0, kvGrens ? B.kvMax : 70, T.kv)}
     ${rij('Zetmeel + suiker', 'g per kg DS', `${n(T.zs)} g, waarvan suiker ${n(T.suiker)} g${zsGrens ? ` (max ${n(B.zsMax)})` : ' (geen grens)'}`, sZs, 0, zsSchaal, 0, zsGrens ? B.zsMax : zsSchaal, T.zs, sZs === 'let' ? 'veel suiker' : '')}
   </div>
   ${T.zsOnbekend && T.zsOnbekend.length ? `<p class="small muted">Zetmeel en suiker onbekend voor ${zinLijst(T.zsOnbekend.map(esc))}; de app telt die als 0. Vul ze in bij Voeders.</p>` : ''}`;
@@ -2579,6 +2610,7 @@ function bindendeNormen(R) {
   if (Math.abs(T.ds - B.dsMin) < 0.06) uit.push(`de droge stof zit op het minimum (${n(B.dsMin, 1)} kg)`);
   if (Math.abs(T.sw - B.swMin) < 0.01) uit.push(`de structuur zit op het minimum (${n(B.swMin, 2)} per kg DS)`);
   if (Number.isFinite(B.zsMax) && Math.abs(T.zs - B.zsMax) < 2) uit.push(`zetmeel + suiker zit op het maximum (${n(B.zsMax)} g per kg DS)`);
+  if (Number.isFinite(B.kvMax) && Math.abs(T.kv - B.kvMax) < 0.3) uit.push(`het krachtvoer zit op het maximum (${n(B.kvMax)}% van de droge stof)`);
   if (Number.isFinite(B.suikerMax) && Math.abs(T.suiker - B.suikerMax) < 2) uit.push(`suiker zit op het maximum (${n(B.suikerMax)} g per kg DS)`);
   return uit;
 }
@@ -2621,7 +2653,7 @@ function openUitleg(onderwerp, id) {
     voer: () => uitlegVoer(id), advies: uitlegAdvies, saldo: uitlegSaldo, verschil: uitlegVerschil,
     kosten100: uitlegKosten100, kosten: uitlegKosten, ds: uitlegDs, vem: uitlegVem, dve: uitlegDve,
     oeb: uitlegOeb, sw: uitlegSw, melkgeld: uitlegMelkgeld, curve: uitlegCurve,
-    zs: uitlegZs, voorraad: () => uitlegVoorraad(id), fosfaat: uitlegFosfaat, watals: uitlegWatAls, waarde: uitlegWaarde,
+    zs: uitlegZs, kv: uitlegKv, ras: uitlegRas, voorraad: () => uitlegVoorraad(id), fosfaat: uitlegFosfaat, watals: uitlegWatAls, waarde: uitlegWaarde,
     mest: uitlegMest, producten: uitlegProducten, mengwagen: uitlegMengwagen, csv: uitlegCsv, geschiedenis: uitlegGeschiedenis, scenarios: uitlegScenarios, marktprijzen: uitlegMarktprijzen,
   }[onderwerp];
   if (!fn) return;
@@ -2742,6 +2774,7 @@ function uitlegAdvies() {
       <li>OEB: tussen ${n(B.oebMin)} en ${n(B.oebMax)} g</li>
       <li>Droge stof: tussen ${n(B.dsMin, 1)} en ${n(B.dsMax, 1)} kg</li>
       <li>Structuur: minimaal ${n(B.swMin, 2)} per kg DS</li>
+      <li>Krachtvoer: ${Number.isFinite(B.kvMax) ? `maximaal ${n(B.kvMax)}% van de droge stof` : 'geen grens'}</li>
       <li>Zetmeel + suiker: ${Number.isFinite(B.zsMax) ? `maximaal ${n(B.zsMax)} g per kg DS` : 'geen grens'}${Number.isFinite(B.suikerMax) ? `, waarvan suiker maximaal ${n(B.suikerMax)} g` : ''}</li>
       <li>Het minimum en maximum per voer, en de voorraadplanning (voorraad moet meegaan of op)</li>
     </ul>
@@ -2831,8 +2864,15 @@ function uitlegDs() {
   const auto = i.dsAuto !== false;
   return `${bladKop('Droge stof')}
     <p>De droge-stofopname is hoeveel voer (zonder water) een koe per dag kan opnemen. Een rantsoen moet de pens vullen, maar de koe kan niet onbeperkt eten.</p>
-    ${auto ? `<p class="som">13,5 + 0,25 × ${n(num(i.melk, 0), 1)} kg melk = <b>${n(B.dsDoel, 1)} kg DS</b></p>
-      <p class="small muted">Geschat volgens het Handboek Melkveehouderij: ongeveer 18,5 kg bij 20 kg melk en 23,5 kg bij 40 kg melk. Weet je de echte opname, zet de schatting dan uit bij Bedrijf → Normen voor het advies.</p>`
+    ${auto ? (() => {
+      const lg = num(i.lg, DS_LG_REF), vz = Math.min(100, Math.max(0, num(i.vaarzen, 0)));
+      const basis = 13.5 + 0.25 * num(i.melk, 0), gew = DS_PER_KG_LG * (lg - DS_LG_REF);
+      return `<p class="som">13,5 + 0,25 × ${n(num(i.melk, 0), 1)} kg melk = ${n(basis, 1)} kg DS</p>
+      ${Math.abs(gew) >= 0.05 ? `<p class="som">Gewicht: 0,012 × (${n(lg)} − ${n(DS_LG_REF)} kg) = ${gew > 0 ? '+' : '−'}${n(Math.abs(gew), 1)} kg DS</p>` : ''}
+      ${vz > 0 ? `<p class="som">Vaarzen: ${n(vz)}% van het koppel eet ongeveer 10% minder = −${n((basis + gew) * DS_VAARS_MINDER * vz / 100, 1)} kg DS</p>` : ''}
+      <p class="som">Opnamecapaciteit: <b>${n(B.dsDoel, 1)} kg DS</b> per koe per dag</p>
+      <p class="small muted">De basis komt uit het Handboek Melkveehouderij, voor een koe van ongeveer ${n(DS_LG_REF)} kg: ongeveer 18,5 kg bij 20 kg melk en 23,5 kg bij 40 kg melk. Een zwaardere koe kan meer opnemen (ongeveer 1,2 kg DS per 100 kg gewicht), vaarzen minder. Weet je de echte opname, bijvoorbeeld uit de mengwagen, zet de schatting dan uit bij Bedrijf → Normen voor het advies. ${uitlegKnop('ras', '', 'ras en opname')}</p>`;
+    })()
       : `<p>Je hebt de opname zelf ingesteld bij Bedrijf.</p>`}
     <p>Toegestaan: van ${n(B.dsMin, 1)} kg (1,5 kg minder) tot ${n(B.dsMax, 1)} kg (0,5 kg meer).</p>
     <h3>Droge stof in ${naam}: ${n(R.T.ds, 1)} kg</h3>
@@ -3023,6 +3063,35 @@ function uitlegZs() {
     <p class="small muted">Bestendig zetmeel (dat pas in de darm wordt verteerd) rekent de app niet apart. Het Handboek Melkveehouderij adviseert in de late lactatie maximaal 30 g bestendig zetmeel per kg DS.</p>
     ${R.T.zsGeschat && R.T.zsGeschat.length ? `<div class="melding let"><span class="stip"></span><div>Voor ${zinLijst(R.T.zsGeschat.map(esc))} rekent de app met een <b>schatting</b> op basis van de naam. Een kuilanalyse geeft het zetmeel- en suikergehalte; vul die in bij Voeders voor een betrouwbaarder advies.</div></div>` : ''}
     ${R.T.zsOnbekend && R.T.zsOnbekend.length ? `<div class="melding kritiek"><span class="stip"></span><div>Voor ${zinLijst(R.T.zsOnbekend.map(esc))} weet de app het zetmeel en suiker niet; die tellen als 0. Vul de waarden van het productblad in.</div></div>` : ''}`;
+}
+
+function uitlegRas() {
+  const i = ins(), B = behoefte(i, num(i.melk, 28), 970);
+  const ras = RASSEN[i.ras];
+  return `${bladKop('Ras en opname')}
+    <p>Holsteiners zijn grote koeien (gemiddeld zo'n 650 tot 750 kg) met een hoge melkproductie. Ze nemen juist <b>veel</b> droge stof op: bij volle productie vaak 20 tot 26 kg per dag. Kleinere rassen zoals Jersey nemen minder op.</p>
+    <p>Waar het om gaat, is de <b>opnamecapaciteit</b>: wat een koe maximaal kan eten. Het rantsoen moet binnen die hoeveelheid genoeg energie en eiwit leveren. Daarnaast moet het veilig zijn voor de pens. Bij hoogproductieve Holsteiners is pensverzuring het grootste risico: te veel krachtvoer, zetmeel en suiker en te weinig structuur.</p>
+    <h3>Wat de app met het ras doet</h3>
+    <ul>
+      <li><b>Lichaamsgewicht:</b> het ras geeft een startwaarde${ras && ras.lg ? ` (${esc(ras.naam)}: ${n(ras.lg)} kg)` : ''}. Pas die aan als jullie koeien zwaarder of lichter zijn. Het gewicht bepaalt de energie en het eiwit voor onderhoud, en de opnamecapaciteit.</li>
+      <li><b>Opnamecapaciteit:</b> ongeveer 1,2 kg droge stof meer per 100 kg gewicht. Vaarzen (eerste lactatie) nemen ongeveer 10% minder op dan oudere koeien. Nu: <b>${n(B.dsDoel, 1)} kg DS</b>; het advies blijft tussen ${n(B.dsMin, 1)} en ${n(B.dsMax, 1)} kg.</li>
+      <li><b>Pensveiligheid:</b> minimaal ${n(B.swMin, 2)} structuurwaarde per kg DS, ${Number.isFinite(B.zsMax) ? `maximaal ${n(B.zsMax)} g zetmeel en suiker per kg DS` : 'geen grens voor zetmeel en suiker'} en ${Number.isFinite(B.kvMax) ? `maximaal ${n(B.kvMax)}% krachtvoer in de droge stof` : 'geen grens voor het aandeel krachtvoer'}. ${uitlegKnop('kv', '', 'grens krachtvoer')}</li>
+    </ul>
+    <p class="small muted">De CVB-normen kennen geen aparte normen per ras; ze rekenen met gewicht, melkproductie en gehaltes. Het ras is in de app dus vooral een hulp om een passend gewicht te kiezen. De echte opname zie je het best aan de mengwagen (tabblad Rantsoen → Mengwagen → Gevoerd).</p>`;
+}
+
+function uitlegKv() {
+  const { R, naam } = huidigOfAdvies();
+  const B = R.B;
+  const kv = gesorteerd().filter(v => v.soort === 'krachtvoer' && (R.kgDs[v.id] || 0) > 0.005);
+  return `${bladKop('Aandeel krachtvoer')}
+    <p>Krachtvoer is snel verteerbaar en geeft veel energie, maar weinig structuur. Hoe groter het aandeel in het rantsoen, hoe groter het risico op pensverzuring: de koe gaat minder herkauwen, vreet minder, het vetgehalte zakt en de klauwen lijden eronder.</p>
+    <p class="som">Aandeel = kg DS krachtvoer ÷ kg DS totaal × 100</p>
+    <p class="som">${n(R.T.kvDs, 1)} kg ÷ ${n(R.T.ds, 1)} kg = <b>${n(R.T.kv)}%</b> in ${naam}</p>
+    ${kv.length ? `<p class="small">${zinLijst(kv.map(v => `${esc(v.naam)} ${n(R.kgDs[v.id], 1)} kg DS`))}.</p>` : ''}
+    <h3>Welke grens?</h3>
+    <p>Er is geen officiële norm. Een veel gebruikte vuistregel is dat minstens de helft van de droge stof uit ruwvoer moet komen. De app stelt bij het kiezen van een ras maximaal <b>${KV_MAX_ADVIES}%</b> krachtvoer voor. Nu ingesteld: ${Number.isFinite(B.kvMax) ? `<b>maximaal ${n(B.kvMax)}%</b>` : 'geen grens'}. Pas de grens aan bij Bedrijf → Normen voor het advies, het liefst in overleg met jullie voeradviseur.</p>
+    <p class="small muted">Alleen voeders met de soort "Krachtvoer" tellen mee. Bijproducten zoals perspulp of bierbostel tellen niet mee, ook als ze veel energie geven; daarvoor zijn de grenzen voor structuur en zetmeel en suiker er. Controleer dus bij Voeders of de soort per voer klopt.</p>`;
 }
 
 function uitlegMest() {
@@ -3390,19 +3459,24 @@ function viewKoppel() {
       </div>
     </fieldset></section>
 
-    <section class="panel"><fieldset><legend>Koppel</legend>
+    <section class="panel"><fieldset><legend>Koppel ${uitlegKnop('ras', '', 'ras en opname')}</legend>
       <div class="velden">
+        <div class="veld"><label for="k-ras">Ras</label><select id="k-ras" name="ras"${ro}>
+          <option value=""${!RASSEN[i.ras] ? ' selected' : ''}>Niet gekozen</option>
+          ${Object.entries(RASSEN).map(([k, r]) => `<option value="${k}"${i.ras === k ? ' selected' : ''}>${esc(r.naam)}</option>`).join('')}</select>
+          <span class="hint">vult een passend lichaamsgewicht in</span></div>
+        ${veld('vaarzen', 'Vaarzen in het koppel', i.vaarzen, '% eerste lactatie; zij eten minder')}
         ${veld('koeien', 'Melkkoeien', i.koeien, '')}
         ${veld('melk', 'Melk per koe per dag', i.melk, 'kg (1 liter ≈ 1,03 kg)')}
         ${veld('vet', 'Vetgehalte', i.vet, '%')}
         ${veld('eiwit', 'Eiwitgehalte', i.eiwit, '%')}
-        ${veld('lg', 'Lichaamsgewicht', i.lg, 'kg, gemiddeld')}
+        ${veld('lg', 'Lichaamsgewicht', i.lg, RASSEN[i.ras] && RASSEN[i.ras].lg ? `kg, gemiddeld (${esc(RASSEN[i.ras].kort)} ca. ${n(RASSEN[i.ras].lg)})` : 'kg, gemiddeld')}
         <div class="veld"><label for="k-beweiding">Beweiding</label><select id="k-beweiding" name="beweiding"${ro}>
           <option value="stal"${i.beweiding === 'stal' ? ' selected' : ''}>Op stal</option>
           <option value="beperkt"${i.beweiding === 'beperkt' ? ' selected' : ''}>Beperkt weiden</option>
           <option value="weide"${i.beweiding === 'weide' ? ' selected' : ''}>Dag en nacht weiden</option></select></div>
       </div>
-      <p class="small muted" id="behoefte-regel">Behoefte bij ${n(num(i.melk, 0), 1)} kg melk: ${n(B.vem)} VEM2022 en ${n(B.dve)} g DVE per koe per dag (${n(B.fpcm, 1)} kg meetmelk).</p>
+      <p class="small muted" id="behoefte-regel">${behoefteRegel(i, B)}</p>
     </fieldset></section>
 
     <section class="panel"><fieldset><legend>Melkprijs</legend>
@@ -3448,15 +3522,16 @@ function viewKoppel() {
     <section class="panel"><fieldset><legend>Normen voor het advies</legend>
       <label class="vink"><input type="checkbox" id="k-dsAuto" name="dsAuto"${i.dsAuto !== false ? ' checked' : ''}${ro}> Droge-stofopname automatisch schatten</label>
       <div class="velden">
-        ${veld('dsOpname', 'Droge-stofopname', i.dsAuto !== false ? Math.round(dsAutoVoor(num(i.melk, 28)) * 10) / 10 : i.dsOpname, 'kg DS per koe per dag', '', i.dsAuto !== false ? ' readonly' : '')}
+        ${veld('dsOpname', 'Droge-stofopname', i.dsAuto !== false ? Math.round(dsAutoVoor(num(i.melk, 28), i) * 10) / 10 : i.dsOpname, 'kg DS per koe per dag', '', i.dsAuto !== false ? ' readonly' : '')}
         ${veld('swMin', 'Structuurwaarde minimaal', i.swMin, 'per kg DS')}
         ${veld('oebMin', 'OEB minimaal', i.oebMin, 'g per koe per dag (CVB-norm: 0)', '', '', true)}
         ${veld('oebMax', 'OEB maximaal', i.oebMax, 'g per koe per dag; hoger geeft meer ruimte voor graskuil en meer stikstof in de mest', '', '', true)}
         ${veld('vemMarge', 'Energie boven behoefte', i.vemMarge, '% dat maximaal mag')}
         ${veld('zsMax', 'Zetmeel + suiker maximaal', i.zsMax, 'g per kg DS; leeg = geen grens')}
         ${veld('suikerMax', 'Suiker maximaal', i.suikerMax, 'g per kg DS; leeg = geen grens')}
+        ${veld('kvMax', 'Krachtvoer maximaal', i.kvMax, `% van de droge stof; leeg = geen grens (advies ${KV_MAX_ADVIES})`)}
       </div>
-      <p class="small muted">Wat betekenen deze grenzen? OEB ${uitlegKnop('oeb', '', 'pensbalans OEB')} · zetmeel en suiker ${uitlegKnop('zs', '', 'zetmeel en suiker')}</p>
+      <p class="small muted">Wat betekenen deze grenzen? Droge stof ${uitlegKnop('ds', '', 'droge stof')} · OEB ${uitlegKnop('oeb', '', 'pensbalans OEB')} · zetmeel en suiker ${uitlegKnop('zs', '', 'zetmeel en suiker')} · krachtvoer ${uitlegKnop('kv', '', 'aandeel krachtvoer')}</p>
       <label class="vink"><input type="checkbox" id="k-jeugd" name="jeugd"${i.jeugd !== false ? ' checked' : ''}${ro}> Toeslag jeugdgroei (330 VEM, 37 g DVE, koppelgemiddelde)</label>
       <div class="velden">
         ${veld('extraVem', 'Extra toeslag VEM', i.extraVem, 'bijv. dracht', '', '', true)}
@@ -3471,7 +3546,7 @@ function viewKoppel() {
         <li>Onderhoud: <code>53,0 × LG^0,75</code> VEM2022, gecorrigeerd voor de energiedichtheid van het rantsoen (61,0 bij beperkt en 68,9 bij dag en nacht weiden).</li>
         <li>Melk: <code>390 × meetmelk</code> VEM2022. Meetmelk = kg melk × (0,337 + 0,116 × vet% + 0,06 × eiwit%).</li>
         <li>DVE: <code>54 + 0,1 × LG + 1,396 × E + 0,000195 × E²</code>, met E = gram melkeiwit per dag.</li>
-        <li>Droge-stofopname: 18,5 kg bij 20 kg melk en 23,5 kg bij 40 kg melk (Handboek Melkveehouderij), met 1,5 kg ruimte omlaag en 0,5 kg omhoog.</li>
+        <li>Droge-stofopname: 18,5 kg bij 20 kg melk en 23,5 kg bij 40 kg melk voor een koe van 675 kg (Handboek Melkveehouderij), plus 1,2 kg per 100 kg zwaarder, en ongeveer 10% minder voor vaarzen. Met 1,5 kg ruimte omlaag en 0,5 kg omhoog.</li>
       </ul>
       <p>Het advies is het goedkoopste rantsoen uit jullie voeders dat aan alle normen voldoet (lineaire programmering). Lukt dat niet, dan zoekt de app het rantsoen dat er het dichtst bij komt en zegt wat er ontbreekt. Mineralen tellen mee als vaste gift.</p>
       <p>Melkgeld = kg melk × (eiwit% × eiwitwaarde + vet% × vetwaarde) uit de Campina-garantieprijs, plus jullie toeslag. Voersaldo = melkgeld min voerkosten.</p>
@@ -3500,21 +3575,33 @@ function viewKoppel() {
       : '<button class="btn gevaar klein" data-act="bedrijf-weg-vraag">Bedrijf verwijderen</button>'}</div>
   </section>` : ''}`;
 }
+function behoefteRegel(i, B) {
+  return `Behoefte bij ${n(num(i.melk, 0), 1)} kg melk: ${n(B.vem)} VEM2022 en ${n(B.dve)} g DVE per koe per dag (${n(B.fpcm, 1)} kg meetmelk). Opnamecapaciteit ongeveer ${n(B.dsDoel, 1)} kg droge stof.`;
+}
+// Ras gekozen: gewicht van het ras invullen, en een krachtvoergrens als die er nog niet is
+function rasGekozen(f) {
+  const r = RASSEN[f.elements.ras.value];
+  const meld = [];
+  if (r && r.lg && f.elements.lg && num(f.elements.lg.value, 0) !== r.lg) { f.elements.lg.value = invoer(r.lg); meld.push(`lichaamsgewicht ${n(r.lg)} kg`); }
+  if (r && f.elements.kvMax && f.elements.kvMax.value.trim() === '') { f.elements.kvMax.value = invoer(KV_MAX_ADVIES); meld.push(`krachtvoer maximaal ${KV_MAX_ADVIES}%`); }
+  if (meld.length) toast(`Ingevuld: ${zinLijst(meld)}. Pas aan als het bij jullie anders is.`);
+}
 function leesKoppelForm() {
   const f = $('#koppelform'); if (!f) return;
   const nieuw = Object.assign({}, ins());
-  ['koeien', 'melk', 'vet', 'eiwit', 'lg', 'toeslag', 'eigenMelkprijs', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'extraVem', 'extraDve',
-    'zsMax', 'suikerMax', 'fosfaatrechten', 'fosfaatPrijs', 'koeienTotaal', 'jaarMelk', 'kalveren', 'pinken',
+  ['koeien', 'melk', 'vet', 'eiwit', 'lg', 'vaarzen', 'toeslag', 'eigenMelkprijs', 'dsOpname', 'swMin', 'oebMin', 'oebMax', 'vemMarge', 'extraVem', 'extraDve',
+    'zsMax', 'suikerMax', 'kvMax', 'fosfaatrechten', 'fosfaatPrijs', 'koeienTotaal', 'jaarMelk', 'kalveren', 'pinken',
     'mestAfvoer', 'mestPrijs', 'mestN', 'mestP', 'mestVerlies'].forEach(k => {
     const el = f.elements[k]; if (!el) return;
     const raw = el.value.trim();
     if (raw === '' && ['toeslag', 'extraVem', 'extraDve', 'oebMin'].includes(k)) { nieuw[k] = 0; return; }
-    if (raw === '' && ['zsMax', 'suikerMax', 'fosfaatrechten', 'koeienTotaal', 'jaarMelk', 'kalveren', 'pinken', 'mestAfvoer', 'mestPrijs'].includes(k)) { nieuw[k] = ''; return; }
+    if (raw === '' && ['vaarzen', 'kvMax', 'zsMax', 'suikerMax', 'fosfaatrechten', 'koeienTotaal', 'jaarMelk', 'kalveren', 'pinken', 'mestAfvoer', 'mestPrijs'].includes(k)) { nieuw[k] = ''; return; }
     if (raw === '' && ['mestN', 'mestP', 'mestVerlies'].includes(k)) { nieuw[k] = STANDAARD_INS[k]; return; }
     const x = num(raw, NaN);
     if (Number.isFinite(x)) nieuw[k] = x;
   });
   nieuw.beweiding = f.elements.beweiding.value;
+  if (f.elements.ras) nieuw.ras = f.elements.ras.value;
   if (f.elements.mestBeperkend) nieuw.mestBeperkend = f.elements.mestBeperkend.value;
   if (f.elements.mestMeewegen) nieuw.mestMeewegen = f.elements.mestMeewegen.checked;
   const modusEl = f.querySelector('input[name="melkprijsModus"]:checked');
@@ -3527,7 +3614,7 @@ function leesKoppelForm() {
   nieuw.dsAuto = f.elements.dsAuto.checked;
   nieuw.jeugd = f.elements.jeugd.checked;
   const dsEl = f.elements.dsOpname;
-  if (nieuw.dsAuto) { dsEl.value = invoer(Math.round(dsAutoVoor(num(nieuw.melk, 28)) * 10) / 10); dsEl.readOnly = true; }
+  if (nieuw.dsAuto) { dsEl.value = invoer(Math.round(dsAutoVoor(num(nieuw.melk, 28), nieuw) * 10) / 10); dsEl.readOnly = true; }
   else dsEl.readOnly = false;
   if (S.ins && S.ins.voorbeeld) nieuw.voorbeeld = true;
   // Nieuwe mestafvoer ingevuld: die hoort bij het rantsoen en koppel van vandaag
@@ -3537,7 +3624,7 @@ function leesKoppelForm() {
   if (b && f.elements.naam) b.naam = f.elements.naam.value.trim();
   renderKop();
   const br = $('#behoefte-regel');
-  if (br) { const B = behoefte(nieuw, num(nieuw.melk, 28), 970); br.textContent = `Behoefte bij ${n(num(nieuw.melk, 0), 1)} kg melk: ${n(B.vem)} VEM2022 en ${n(B.dve)} g DVE per koe per dag (${n(B.fpcm, 1)} kg meetmelk).`; }
+  if (br) br.textContent = behoefteRegel(nieuw, behoefte(nieuw, num(nieuw.melk, 28), 970));
   bewaarIns(false);
 }
 
@@ -3611,7 +3698,7 @@ function viewVergelijk() {
         <td class="n">${r.fosfaat ? (r.fosfaat.ruimte >= 0 ? `+${n(r.fosfaat.ruimte)} kg` : `<span class="pil kritiek">${n(-r.fosfaat.ruimte)} kg tekort</span>`) : '–'}</td>
         <td class="n">${r.voeders ? n(r.nKoe, 1) + ' kg' : '–'}</td>
         <td class="n">${r.mest.actief ? `${n(r.mest.m3)} m³<br><small class="muted">${eur(r.mest.kostenJaar, 0)}</small>` : '–'}</td>
-        <td>${!r.voeders ? '<span class="muted">geen voeders</span>' : r.tekort.length ? `<span class="pil kritiek">${r.tekort.map(p => ({ vem: 'VEM tekort', dve: 'DVE tekort', oebMin: 'OEB te laag', dsMax: 'te veel DS', sw: 'te weinig structuur', zs: 'te veel zetmeel' }[p.key] || p.key)).join(', ')}</span>` : '<span class="pil ok">gedekt</span>'}</td>
+        <td>${!r.voeders ? '<span class="muted">geen voeders</span>' : r.tekort.length ? `<span class="pil kritiek">${r.tekort.map(p => ({ vem: 'VEM tekort', dve: 'DVE tekort', oebMin: 'OEB te laag', dsMax: 'te veel DS', sw: 'te weinig structuur', zs: 'te veel zetmeel', kv: 'te veel krachtvoer' }[p.key] || p.key)).join(', ')}</span>` : '<span class="pil ok">gedekt</span>'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
     <p class="small muted">Tik op een bedrijf in de grafiek om het rantsoen ervan te openen. Fosfaatruimte = fosfaatrechten min de fosfaatproductie volgens de RVO-tabel; "–" als de rechten niet zijn ingevuld. N mest = stikstof die een melkkoe met het huidige rantsoen per jaar in de mest uitscheidt (opname min melk, na verlies in stal en opslag). ${uitlegKnop('mest', '', 'mest')}</p>
@@ -3858,7 +3945,7 @@ function rantsoenMoment(notitie, reden) {
       if (v.soort !== 'mineraal') ['ds', 'vem', 'dve', 'oeb', 'sw', 'zetmeel', 'suiker', 're', 'p'].forEach(k => { if (v[k] !== undefined) o[k] = v[k]; });
       return o;
     }),
-    ins: Object.fromEntries(['koeien', 'melk', 'vet', 'eiwit', 'lg', 'beweiding', 'dsAuto', 'dsOpname', 'jeugd', 'extraVem', 'extraDve', 'melkprijsModus', 'eigenMelkprijs', 'toeslag'].map(k => [k, i[k] === undefined ? '' : i[k]])),
+    ins: Object.fromEntries(['koeien', 'melk', 'vet', 'eiwit', 'lg', 'ras', 'vaarzen', 'beweiding', 'dsAuto', 'dsOpname', 'jeugd', 'extraVem', 'extraDve', 'melkprijsModus', 'eigenMelkprijs', 'toeslag'].map(k => [k, i[k] === undefined ? '' : i[k]])),
     kern: {
       melk: num(i.melk, 0), koeien: num(i.koeien, 0), kosten: eH.kosten, melkgeld: eH.melkgeld, saldo: eH.saldo, per100: eH.per100, prijs100: eH.prijs * 100,
       ds: H.T.ds, vemPct: H.B.vem ? H.T.vem / H.B.vem * 100 : 0, dvePct: H.B.dve ? H.T.dve / H.B.dve * 100 : 0, oeb: H.T.oeb, sw: H.T.sw,
@@ -4092,9 +4179,13 @@ function viewPrijzen() {
   ${viewFosfaatMestPrijzen()}
   ${STANDALONE ? `<section class="panel">
     <h3>Prijzen bijwerken</h3>
-    <p class="small muted">${P.reserve ? 'Dit zijn de prijzen die in de app zijn meegeleverd.' : `Laatst bijgewerkt ${P.bijgewerkt ? datumNL(P.bijgewerkt) : ''}.`} Met internet haalt de app bij het openen zelf de nieuwste prijzen op van jullie website. Lukt dat niet, dan vul je ze hier zelf in.</p>
+    <p class="small muted">${P.reserve ? 'Dit zijn de prijzen die in de app zijn meegeleverd.' : P.bijgewerkt ? `Laatst bijgewerkt ${datumNL(P.bijgewerkt)}.` : ''} Met internet haalt de app bij het openen zelf de nieuwste prijzen op van jullie website. Lukt dat niet, dan vul je ze hier zelf in.</p>
     <div class="knoppen"><button class="btn" data-act="prijzen-ophalen">Nu ophalen</button><button class="btn" data-act="prijzen-form">Zelf invullen</button></div>
-  </section>` : `<p class="small muted">${P.reserve ? 'Laatst bekende prijzen in de app.' : `Bijgewerkt ${P.bijgewerkt ? datumNL(P.bijgewerkt) : ''}.`} De prijzen worden automatisch opgehaald op de 1e en 15e van de maand. WUR publiceert elke vier weken, FrieslandCampina maakt de melkprijs rond het einde van de maand bekend.</p>`}`;
+  </section>` : `<section class="panel">
+    <h3>Prijzen bijwerken</h3>
+    <p class="small muted">${P.reserve ? 'Dit zijn de laatst bekende prijzen in de app.' : P.bijgewerkt ? `Laatst bijgewerkt ${datumNL(P.bijgewerkt)}.` : ''} Een geplande taak haalt de prijzen automatisch op, op de 1e en 15e van de maand. WUR publiceert elke vier weken, FrieslandCampina maakt de melkprijs rond het einde van de maand bekend. Is er al een nieuwere prijs bekend, dan vul je die hier zelf in; die geldt dan voor iedereen die deze app opent.</p>
+    ${S.kanSchrijven ? '<div class="knoppen"><button class="btn" data-act="prijzen-form">Zelf invullen</button></div>' : ''}
+  </section>`}`;
 }
 function viewFosfaatMestPrijzen() {
   const P = prijzen(), f = P.fosfaat, i = ins(), b = huidigBedrijf();
@@ -4568,7 +4659,7 @@ document.addEventListener('change', ev => {
   if (ev.target.id === 'csv-input') { const file = ev.target.files && ev.target.files[0]; ev.target.value = ''; csvBestand(file); return; }
   if (ev.target.id === 'gv-datum') { const d = ev.target.value; S.gevoerdDatum = d && d !== vandaagISO() ? d : null; render(); return; }
   if (ev.target.closest && ev.target.closest('#csvform, #csv-koppeling') && (ev.target.dataset.csv !== undefined || ev.target.dataset.csvProduct !== undefined)) { csvWijzig(ev.target); return; }
-  if (ev.target.closest && ev.target.closest('#koppelform')) leesKoppelForm();
+  if (ev.target.closest && ev.target.closest('#koppelform')) { if (ev.target.name === 'ras') rasGekozen(ev.target.form); leesKoppelForm(); }
 });
 // Logo dat niet laadt: toon de initialen
 document.addEventListener('error', ev => {
@@ -4592,5 +4683,4 @@ start();
 
 </script>
 
-</body>
-</html>
+</body></html>
