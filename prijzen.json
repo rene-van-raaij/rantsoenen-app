@@ -4,19 +4,69 @@
   "kvem": 25.3,
   "dveToeslag": 104.2,
   "volgende": "2026-11-10",
-  "mengvoer": {"90": 34.2, "105": 35.73, "120": 36.99, "150": 40.14, "180": 43.65},
+  "mengvoer": {
+   "90": 34.2,
+   "105": 35.73,
+   "120": 36.99,
+   "150": 40.14,
+   "180": 43.65
+  },
   "historie": [
-   {"datum": "2025-12-09", "kvem": 21.2, "dve": 72.4},
-   {"datum": "2026-01-13", "kvem": 20.9, "dve": 74.4},
-   {"datum": "2026-02-10", "kvem": 21.0, "dve": 76.1},
-   {"datum": "2026-03-10", "kvem": 20.8, "dve": 82.9},
-   {"datum": "2026-04-14", "kvem": 20.9, "dve": 89.8},
-   {"datum": "2026-05-12", "kvem": 20.6, "dve": 92.2},
-   {"datum": "2026-06-09", "kvem": 20.8, "dve": 89.9},
-   {"datum": "2026-07-14", "kvem": 20.9, "dve": 87.7},
-   {"datum": "2026-08-11", "kvem": 24.2, "dve": 83.2},
-   {"datum": "2026-09-08", "kvem": 24.1, "dve": 94.2},
-   {"datum": "2026-10-13", "kvem": 25.3, "dve": 104.2}
+   {
+    "datum": "2025-12-09",
+    "kvem": 21.2,
+    "dve": 72.4
+   },
+   {
+    "datum": "2026-01-13",
+    "kvem": 20.9,
+    "dve": 74.4
+   },
+   {
+    "datum": "2026-02-10",
+    "kvem": 21.0,
+    "dve": 76.1
+   },
+   {
+    "datum": "2026-03-10",
+    "kvem": 20.8,
+    "dve": 82.9
+   },
+   {
+    "datum": "2026-04-14",
+    "kvem": 20.9,
+    "dve": 89.8
+   },
+   {
+    "datum": "2026-05-12",
+    "kvem": 20.6,
+    "dve": 92.2
+   },
+   {
+    "datum": "2026-06-09",
+    "kvem": 20.8,
+    "dve": 89.9
+   },
+   {
+    "datum": "2026-07-14",
+    "kvem": 20.9,
+    "dve": 87.7
+   },
+   {
+    "datum": "2026-08-11",
+    "kvem": 24.2,
+    "dve": 83.2
+   },
+   {
+    "datum": "2026-09-08",
+    "kvem": 24.1,
+    "dve": 94.2
+   },
+   {
+    "datum": "2026-10-13",
+    "kvem": 25.3,
+    "dve": 104.2
+   }
   ],
   "bron": "https://www.wur.nl/nl/onderzoek/producten-diensten/voederwaardeprijzen-rundvee"
  },
@@ -29,11 +79,988 @@
   "stdVet": 4.49,
   "integraal": 50.71,
   "historie": [
-   {"maand": "2026-09", "garantieprijs": 44.0},
-   {"maand": "2026-10", "garantieprijs": 45.5},
-   {"maand": "2026-11", "garantieprijs": 47.0}
+   {
+    "maand": "2026-09",
+    "garantieprijs": 44.0
+   },
+   {
+    "maand": "2026-10",
+    "garantieprijs": 45.5
+   },
+   {
+    "maand": "2026-11",
+    "garantieprijs": 47.0
+   }
   ],
   "bron": "https://www.frieslandcampina.com/nl/eigendom-van-boeren/garantieprijs/"
  },
- "bijgewerkt": "2026-10-30T19:30:00+01:00"
+ "bijgewerkt": "2026-11-15T13:54:23+01:00",
+ "producten": {
+  "bron": "https://veevoer.nu/",
+  "opgehaald": "2026-11-15",
+  "producten": [
+   {
+    "naam": "Aardappelen",
+    "url": "https://veevoer.nu/product/aardappelen/",
+    "ds": 20.0,
+    "vem": 1097.0,
+    "vevi": 1207.0,
+    "dve": 85.0,
+    "oeb": 3.0,
+    "re": 105.0,
+    "rc": 41.0,
+    "zetmeel": 638.0,
+    "suiker": 7.0,
+    "p": 2.5,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Schapen"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Aardappelen biologisch",
+    "url": "https://veevoer.nu/product/biologische-aardappelen/",
+    "ds": 20.0,
+    "vem": 1097.0,
+    "vevi": 1207.0,
+    "dve": 85.0,
+    "oeb": 3.0,
+    "re": 105.0,
+    "rc": 41.0,
+    "zetmeel": 638.0,
+    "suiker": 7.0,
+    "p": null,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Schapen"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Aardappelpulp",
+    "url": "https://veevoer.nu/product/aardappelpulp/",
+    "ds": 40.0,
+    "vem": 1236.0,
+    "vevi": 1391.0,
+    "dve": 94.0,
+    "oeb": -125.0,
+    "re": 30.0,
+    "rc": 42.0,
+    "zetmeel": 806.0,
+    "suiker": 0.0,
+    "p": 0.5,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Aardappelsnippers",
+    "url": "https://veevoer.nu/product/aardappelsnippers/",
+    "ds": 23.5,
+    "dsBereik": "22-25%",
+    "vem": 1131.0,
+    "vevi": 1250.0,
+    "dve": 63.0,
+    "oeb": -52.0,
+    "re": 84.0,
+    "rc": 23.0,
+    "zetmeel": 676.0,
+    "suiker": 20.0,
+    "p": 1.9,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Aardappelstoomschillen",
+    "url": "https://veevoer.nu/product/aardappelstoomschillen/",
+    "ds": 13.0,
+    "vem": 1089.0,
+    "vevi": 1197.0,
+    "dve": 78.0,
+    "oeb": -20.0,
+    "re": 106.0,
+    "rc": 42.0,
+    "zetmeel": 430.0,
+    "suiker": 6.0,
+    "p": 2.0,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Aardappelvezels",
+    "url": "https://veevoer.nu/product/aardappelvezels/",
+    "ds": 20.0,
+    "vem": 1047.0,
+    "vevi": 1131.0,
+    "dve": 79.0,
+    "oeb": -83.0,
+    "re": 52.0,
+    "rc": 191.0,
+    "zetmeel": 290.0,
+    "suiker": 11.0,
+    "p": 1.7,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Rundvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Aardappelzetmeel",
+    "url": "https://veevoer.nu/product/aardappelzetmeel/",
+    "ds": 18.5,
+    "dsBereik": "15-22%",
+    "vem": 1084.0,
+    "vevi": 1197.0,
+    "dve": 62.0,
+    "oeb": -12.0,
+    "re": 95.0,
+    "rc": 22.0,
+    "zetmeel": 658.0,
+    "suiker": 0.0,
+    "p": 1.1,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Appelmelasse",
+    "url": "https://veevoer.nu/product/appelmelasse-2/",
+    "ds": 70.0,
+    "vem": 1145.0,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": 32.5,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": 610.0,
+    "p": 0.87,
+    "diersoorten": [
+     "Rundvee",
+     "Kalveren"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Appelpulp",
+    "url": "https://veevoer.nu/product/appelpulp/",
+    "ds": 25.0,
+    "vem": 946.0,
+    "vevi": 981.0,
+    "dve": 80.0,
+    "oeb": -73.0,
+    "re": 69.0,
+    "rc": 292.0,
+    "zetmeel": 205.0,
+    "suiker": 30.0,
+    "p": 0.7,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Schapen",
+     "Geiten"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Avocadopulp",
+    "url": "https://veevoer.nu/product/avocado/",
+    "ds": 11.0,
+    "vem": 1389.0,
+    "vevi": 1544.0,
+    "dve": 81.0,
+    "oeb": -27.0,
+    "re": 102.0,
+    "rc": 150.0,
+    "zetmeel": 203.0,
+    "suiker": 19.0,
+    "p": 2.7,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Varkens"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Bierbostel",
+    "url": "https://veevoer.nu/product/bierbostel/",
+    "ds": 28.5,
+    "dsBereik": "27-30%",
+    "vem": 964.0,
+    "vevi": 968.0,
+    "dve": 149.0,
+    "oeb": 71.0,
+    "re": 279.0,
+    "rc": 156.0,
+    "zetmeel": 33.0,
+    "suiker": 30.0,
+    "p": 6.5,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Cacaofeed",
+    "url": "https://veevoer.nu/product/cacaofeed/",
+    "ds": 95.0,
+    "vem": 787.0,
+    "vevi": 774.0,
+    "dve": 122.0,
+    "oeb": -21.0,
+    "re": 194.0,
+    "rc": 163.0,
+    "zetmeel": null,
+    "suiker": 16.0,
+    "p": 5.4,
+    "diersoorten": [
+     "Melkvee",
+     "Varkens"
+    ],
+    "categorie": "bijproduct",
+    "leverbaar": false
+   },
+   {
+    "naam": "CCM",
+    "url": "https://veevoer.nu/product/ccm/",
+    "ds": 65.0,
+    "vem": 1207.0,
+    "vevi": 1333.0,
+    "dve": 84.0,
+    "oeb": -45.0,
+    "re": 97.0,
+    "rc": 24.0,
+    "zetmeel": 675.0,
+    "suiker": 9.0,
+    "p": 3.0,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Varkens"
+    ],
+    "categorie": "krachtvoer"
+   },
+   {
+    "naam": "Cichoreipulp",
+    "url": "https://veevoer.nu/product/cichoreipulp/",
+    "ds": 23.5,
+    "dsBereik": "22-25%",
+    "vem": 1007.0,
+    "vevi": 1080.0,
+    "dve": 102.0,
+    "oeb": -68.0,
+    "re": 83.0,
+    "rc": 220.0,
+    "zetmeel": null,
+    "suiker": 100.0,
+    "p": 1.5,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Citruspulp",
+    "url": "https://veevoer.nu/product/citruspulp/",
+    "ds": 20.0,
+    "vem": 1101.0,
+    "vevi": 1191.0,
+    "dve": 87.0,
+    "oeb": -86.0,
+    "re": 67.0,
+    "rc": 97.0,
+    "zetmeel": 169.0,
+    "suiker": 297.0,
+    "p": 1.2,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Schapen",
+     "Geiten"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Citruspulp biologisch",
+    "url": "https://veevoer.nu/product/biologische-citruspulp/",
+    "ds": 20.0,
+    "vem": 1101.0,
+    "vevi": 1191.0,
+    "dve": 87.0,
+    "oeb": -86.0,
+    "re": 67.0,
+    "rc": 97.0,
+    "zetmeel": 169.0,
+    "suiker": 297.0,
+    "p": 1.2,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Schapen",
+     "Geiten"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Dennenzaagsel",
+    "url": "https://veevoer.nu/product/dennenzaagsel/",
+    "ds": 90.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [],
+    "categorie": "strooisel"
+   },
+   {
+    "naam": "Doperwten",
+    "url": "https://veevoer.nu/product/doperwten/",
+    "ds": 16.5,
+    "dsBereik": "16-17%",
+    "vem": 1023.0,
+    "vevi": null,
+    "dve": 105.0,
+    "oeb": 51.0,
+    "re": 270.0,
+    "rc": 54.0,
+    "zetmeel": 416.0,
+    "suiker": 44.0,
+    "p": 4.7,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct",
+    "leverbaar": false
+   },
+   {
+    "naam": "Eiwit-Ferm",
+    "url": "https://veevoer.nu/product/eiwit-ferm-2/",
+    "ds": 36.0,
+    "vem": 1076.0,
+    "vevi": 1167.0,
+    "dve": 138.0,
+    "oeb": 116.0,
+    "re": 305.0,
+    "rc": 16.0,
+    "zetmeel": 22.0,
+    "suiker": 122.0,
+    "p": 3.9,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Fruitpuree",
+    "url": "https://veevoer.nu/product/fruitpuree/",
+    "ds": 8.5,
+    "dsBereik": "7-10%",
+    "vem": 1000.0,
+    "vevi": null,
+    "dve": 90.0,
+    "oeb": null,
+    "re": 104.0,
+    "rc": 236.0,
+    "zetmeel": null,
+    "suiker": null,
+    "p": 4.0,
+    "diersoorten": [
+     "Melkvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Gedroogd wit zaagsel",
+    "url": "https://veevoer.nu/product/gedroogd-wit-zaagsel/",
+    "ds": 90.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [],
+    "categorie": "strooisel"
+   },
+   {
+    "naam": "Gerstestro",
+    "url": "https://veevoer.nu/product/gerstestro/",
+    "ds": 90.0,
+    "vem": 418.0,
+    "vevi": 336.0,
+    "dve": -4.0,
+    "oeb": -17.0,
+    "re": 44.0,
+    "rc": 419.0,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [
+     "Melkvee",
+     "Jongvee"
+    ],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Grasklaver",
+    "url": "https://veevoer.nu/product/grasklaver/",
+    "ds": null,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [
+     "Rundvee",
+     "Schapen",
+     "Geiten"
+    ],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Graszaadhooi",
+    "url": "https://veevoer.nu/product/graszaadhooi/",
+    "ds": 85.0,
+    "dsBereik": "80-90%",
+    "vem": 550.0,
+    "vevi": 550.0,
+    "dve": 25.0,
+    "oeb": -20.0,
+    "re": 70.0,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": 30.0,
+    "p": null,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Kaaswei",
+    "url": "https://veevoer.nu/product/kaaswei/",
+    "ds": 5.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": 160.0,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": 7.9,
+    "diersoorten": [
+     "Varkens"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Kaf",
+    "url": "https://veevoer.nu/product/kaf/",
+    "ds": 90.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [],
+    "categorie": "strooisel"
+   },
+   {
+    "naam": "Kuilgras",
+    "url": "https://veevoer.nu/product/kuilgras/",
+    "ds": 40.0,
+    "dsBereik": "30-50%",
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [
+     "Rundvee",
+     "Schapen",
+     "Geiten"
+    ],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Luzerne",
+    "url": "https://veevoer.nu/product/luzerne/",
+    "ds": 90.0,
+    "vem": 671.0,
+    "vevi": 637.0,
+    "dve": 73.0,
+    "oeb": 23.0,
+    "re": 172.0,
+    "rc": 314.0,
+    "zetmeel": null,
+    "suiker": null,
+    "p": 2.9,
+    "diersoorten": [],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Mais - DDGS",
+    "url": "https://veevoer.nu/product/mais-ddgs/",
+    "ds": 90.0,
+    "vem": 1134.0,
+    "vevi": 1217.0,
+    "dve": 168.0,
+    "oeb": 66.0,
+    "re": 282.0,
+    "rc": 6.8,
+    "zetmeel": 2.0,
+    "suiker": 3.5,
+    "p": 7.6,
+    "diersoorten": [],
+    "categorie": "krachtvoer"
+   },
+   {
+    "naam": "Maisgluten",
+    "url": "https://veevoer.nu/product/maisgluten/",
+    "ds": 43.0,
+    "vem": 1054.0,
+    "vevi": 1130.0,
+    "dve": 88.0,
+    "oeb": 77.0,
+    "re": 213.0,
+    "rc": 110.0,
+    "zetmeel": 140.0,
+    "suiker": 32.0,
+    "p": 12.0,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Maisvoermeel",
+    "url": "https://veevoer.nu/product/maisvoermeel/",
+    "ds": 88.0,
+    "vem": 1234.0,
+    "vevi": 1375.0,
+    "dve": 100.0,
+    "oeb": -73.0,
+    "re": 90.0,
+    "rc": 30.0,
+    "zetmeel": 592.0,
+    "suiker": 17.0,
+    "p": 4.0,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Varkens"
+    ],
+    "categorie": "krachtvoer"
+   },
+   {
+    "naam": "Perspulp",
+    "url": "https://veevoer.nu/product/perspulp/",
+    "ds": 24.0,
+    "vem": 1060.0,
+    "vevi": 1159.0,
+    "dve": 93.0,
+    "oeb": -63.0,
+    "re": 82.0,
+    "rc": 159.0,
+    "zetmeel": 9.0,
+    "suiker": 65.0,
+    "p": 0.9,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Populierenzaagsel",
+    "url": "https://veevoer.nu/product/populierenzaagsel/",
+    "ds": 80.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [],
+    "categorie": "strooisel"
+   },
+   {
+    "naam": "Prei",
+    "url": "https://veevoer.nu/product/prei/",
+    "ds": 9.0,
+    "dsBereik": "8-10%",
+    "vem": 931.0,
+    "vevi": 983.0,
+    "dve": 100.0,
+    "oeb": -16.0,
+    "re": 181.0,
+    "rc": 156.0,
+    "zetmeel": null,
+    "suiker": null,
+    "p": 2.3,
+    "diersoorten": [],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Rijstewater",
+    "url": "https://veevoer.nu/product/rijstewater-2/",
+    "ds": 14.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": 119.0,
+    "rc": null,
+    "zetmeel": 809.0,
+    "suiker": null,
+    "p": 1.59,
+    "diersoorten": [],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Rode wortelpulp",
+    "url": "https://veevoer.nu/product/rode-wortelrestant/",
+    "ds": 13.5,
+    "dsBereik": "12-15%",
+    "vem": 1069.0,
+    "vevi": 1164.0,
+    "dve": 74.0,
+    "oeb": -83.0,
+    "re": 52.0,
+    "rc": 243.0,
+    "zetmeel": 76.0,
+    "suiker": 89.0,
+    "p": 0.88,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Geiten"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Snijmais",
+    "url": "https://veevoer.nu/product/snijmais/",
+    "ds": 35.0,
+    "vem": 918.0,
+    "vevi": 946.0,
+    "dve": 47.0,
+    "oeb": -19.0,
+    "re": 89.0,
+    "rc": 191.0,
+    "zetmeel": 322.0,
+    "suiker": null,
+    "p": 2.0,
+    "diersoorten": [],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Sojacake",
+    "url": "https://veevoer.nu/product/sojacake/",
+    "ds": 73.0,
+    "vem": 1198.0,
+    "vevi": 1311.0,
+    "dve": 147.0,
+    "oeb": 26.0,
+    "re": 222.0,
+    "rc": 78.0,
+    "zetmeel": 331.0,
+    "suiker": 10.0,
+    "p": 1.33,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "krachtvoer"
+   },
+   {
+    "naam": "Sperziebonen",
+    "url": "https://veevoer.nu/product/sperziebonen/",
+    "ds": 9.8,
+    "vem": 932.0,
+    "vevi": 968.0,
+    "dve": 60.0,
+    "oeb": 76.0,
+    "re": 190.0,
+    "rc": 168.0,
+    "zetmeel": 92.0,
+    "suiker": null,
+    "p": 4.1,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Suikermais biologisch",
+    "url": "https://veevoer.nu/product/biologische-suikermais/",
+    "ds": 21.0,
+    "dsBereik": "20-22%",
+    "vem": 883.0,
+    "vevi": 895.0,
+    "dve": 43.0,
+    "oeb": -69.0,
+    "re": 36.0,
+    "rc": 237.0,
+    "zetmeel": 15.0,
+    "suiker": 245.0,
+    "p": 2.1,
+    "diersoorten": [
+     "Rundvee",
+     "Geiten"
+    ],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Tarwegistconcentraat",
+    "url": "https://veevoer.nu/product/tarwegist/",
+    "ds": 27.0,
+    "vem": 1180.0,
+    "vevi": 1280.0,
+    "dve": 140.0,
+    "oeb": 56.0,
+    "re": 250.0,
+    "rc": 13.0,
+    "zetmeel": 35.0,
+    "suiker": 175.0,
+    "p": 7.1,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Tarwegriespellets",
+    "url": "https://veevoer.nu/product/tarwegriespellets/",
+    "ds": 87.5,
+    "vem": 964.0,
+    "vevi": 1006.0,
+    "dve": 74.2,
+    "oeb": 39.5,
+    "re": 195.0,
+    "rc": 90.0,
+    "zetmeel": 249.0,
+    "suiker": 65.0,
+    "p": 8.5,
+    "diersoorten": [],
+    "categorie": "krachtvoer"
+   },
+   {
+    "naam": "Tarwestro",
+    "url": "https://veevoer.nu/product/tarwestro-2/",
+    "ds": 90.0,
+    "vem": 418.0,
+    "vevi": 338.0,
+    "dve": -4.0,
+    "oeb": -17.0,
+    "re": 44.0,
+    "rc": 419.0,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [],
+    "categorie": "ruwvoer"
+   },
+   {
+    "naam": "Vlaslemen",
+    "url": "https://veevoer.nu/product/vlaslemen/",
+    "ds": null,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": null,
+    "rc": null,
+    "zetmeel": null,
+    "suiker": null,
+    "p": null,
+    "diersoorten": [],
+    "categorie": "strooisel"
+   },
+   {
+    "naam": "Vloeibare CCM",
+    "url": "https://veevoer.nu/product/vloeibare-ccm/",
+    "ds": 48.0,
+    "vem": null,
+    "vevi": null,
+    "dve": null,
+    "oeb": null,
+    "re": 91.0,
+    "rc": 16.0,
+    "zetmeel": null,
+    "suiker": 100.0,
+    "p": 5.95,
+    "diersoorten": [],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Voederbieten",
+    "url": "https://veevoer.nu/product/voederbieten/",
+    "ds": 18.0,
+    "dsBereik": "14-22%",
+    "vem": 1056.0,
+    "vevi": 1169.0,
+    "dve": 101.0,
+    "oeb": -99.0,
+    "re": 78.0,
+    "rc": 59.0,
+    "zetmeel": null,
+    "suiker": 587.0,
+    "p": 2.0,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Schapen"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Voerbrood",
+    "url": "https://veevoer.nu/product/voerbrood/",
+    "ds": 71.0,
+    "vem": 1279.0,
+    "vevi": 1426.0,
+    "dve": 117.0,
+    "oeb": -55.0,
+    "re": 133.0,
+    "rc": 12.0,
+    "zetmeel": 515.0,
+    "suiker": 121.0,
+    "p": 2.7,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "Wortelpulp",
+    "url": "https://veevoer.nu/product/wortelpulp-2/",
+    "ds": 14.0,
+    "vem": 1115.0,
+    "vevi": 1216.0,
+    "dve": 80.0,
+    "oeb": -49.0,
+    "re": 93.0,
+    "rc": 211.0,
+    "zetmeel": 153.0,
+    "suiker": 22.0,
+    "p": 2.3,
+    "diersoorten": [
+     "Melkvee",
+     "Vleesvee",
+     "Jongvee",
+     "Geiten"
+    ],
+    "categorie": "bijproduct"
+   },
+   {
+    "naam": "X-beete",
+    "url": "https://veevoer.nu/product/x-beete/",
+    "ds": 14.5,
+    "dsBereik": "12-17%",
+    "vem": 1074.0,
+    "vevi": 1164.0,
+    "dve": 97.0,
+    "oeb": -64.0,
+    "re": 107.0,
+    "rc": 256.0,
+    "zetmeel": 76.0,
+    "suiker": 89.0,
+    "p": 2.7,
+    "diersoorten": [],
+    "categorie": "bijproduct"
+   }
+  ]
+ },
+ "fosfaat": {
+  "datum": "2026-11-08",
+  "koop100": 341.0,
+  "bron": "https://fosfaatrecht.nu/prijs-fosfaatrechten-100-leverbaar/",
+  "koop0": 218.0,
+  "lease": 80.0,
+  "historie": [
+   {
+    "datum": "2026-02-15",
+    "koop100": 125.0,
+    "ca": true
+   },
+   {
+    "datum": "2026-10-25",
+    "koop100": 345.0,
+    "koop0": 218.0,
+    "lease": 80.0
+   },
+   {
+    "datum": "2026-11-08",
+    "koop100": 341.0,
+    "koop0": 218.0,
+    "lease": 80.0
+   }
+  ]
+ }
 }
